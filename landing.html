@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code - Visitor Pass System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="center">
+            <h1> كمبوند دار مصر ٢ الاندلس</h1><br>
+            <label for="name">الاسم:</label>
+            <label id="name"></label><br><br>
+            <label for="building">عمارة:</label>
+            <label id="building"></label><br><br>
+            <label for="flat">شقة:</label>
+            <label id="flat"></label><br><br>
+            <form action="landing.html" id="QRForm">
+            <button type="submit" id="generate">Generate pass</button>
+            </form>
+    <div id="qr-container" style="display: none;">
+        <h2>Your QR Pass:</h2>
+        <canvas id="qr-code" style="size-adjust: 50%;"></canvas><br>
+        <a href="#" id="qr-download" download="qr_pass.png">Download QR Code
+    </div>
+        </div>
+    </div>
+    <script src="app.js" type="module"></script>
+</body>
+</html>
