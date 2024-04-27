@@ -3,9 +3,14 @@
   "name": "Name",
   "building": "Building",
   "apartment": "Apartment",
+  "phone":"Phone",
   "darMisr": "Dar Misr Andalus 2",
   "download": "Download",
   "genrate": "Genrate pass",
   "username": "User Name",
-  "password": "Passwoed"
+  "password": "Passwoed",
+  "invalid": "Invalid username or password",
+  "failed" :"Pass generation failed",
+  "passMessage" : "This pass is vaild only for one time"
+  ,"end":"end"
 }
