@@ -11,7 +11,7 @@
   "username": "Username",
   "password": "Password",
   "invalid": "Invalid username or password",
-  "failed": "Pass generation failed",
+  "failedGenerate": "Pass generation failed",
   "passMessage": "This pass is vaild only for one time",
   "end": "end",
   "register": "Register",
@@ -32,5 +32,9 @@
   "passwordNeedsUppercase": "Password must contain at least one uppercase letter.",
   "passwordMismatch": "Passwords do not match.",
   "confirmPassword": "Confirm Password",
-    "restrictedDevice": "This account is restricted to a different device."
+    "restrictedDevice": "This account is restricted to a different device.",
+    "warning": "Warning",
+    "shareUnsupported": "Your browser does not support sharing this image.",
+    "failed": "Something went wrong, please try again later.",
+    "share": "Share"
 }

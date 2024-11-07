@@ -227,7 +227,7 @@ function Register() {
           </Typography>
           <Box
             component="form"
-            onSubmit={() => handleRegister}
+            onSubmit={handleRegister}
             noValidate
             sx={{ mt: 1 }}
           >

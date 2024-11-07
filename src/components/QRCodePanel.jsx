@@ -2,6 +2,7 @@ import React, { useContext, useState, useRef, useEffect } from "react";
 import QRCode from "react-qr-code";
 import Button from "@mui/material/Button";
 import { Box, Typography, Container } from "@mui/material";
+import { ShareRounded, DownloadingRounded } from "@mui/icons-material";
 import axios from "axios";
 import en from "../../src/locales/en.json";
 import ar from "../../src/locales/ar.json";
@@ -20,6 +21,7 @@ import { uid } from "./UserPanel";
 import { useValue } from "./ContextProvider";
 import { RtlContext } from "./RtlContext";
 
+import { toBlob } from "html-to-image";
 function QRCodePanel() {
   const [qrCodeComponent, setQRCodeComponent] = useState(null);
   const { state } = useValue();
@@ -29,6 +31,8 @@ function QRCodePanel() {
   const [passMessage, setPassMessage] = useState("");
   const [hiddenEndDate, setHiddenEndDate] = useState("");
   const [hiddenData, setHiddenData] = useState("");
+
+  const [qrImageUrl, setQrImageUrl] = useState("");
 
   const lang = isRtl ? ar : en;
 
@@ -93,29 +97,31 @@ function QRCodePanel() {
         );
       }
 
-      // Set hidden data and visibility logic
-      document.getElementById("passMessage").textContent = lang.passMessage;
-      document.getElementById("hiddenEndDate").textContent = formatDate(
-        Date.now() + 24 * 60 * 60 * 1000,
-        false
-      );
-      document.getElementById(
-        "hiddenData"
-      ).textContent = `${lang.name} : ${state.currentUser.name} ${lang.building} : ${state.currentUser.building} ${lang.apartment} : ${state.currentUser.flat}`;
 
-      document.getElementById("qrCode").style.visibility = "visible";
-      document.getElementById("qr-download").style.visibility = "visible";
-      document.getElementById("Message").style.visibility = "visible";
-      dispatch({ type: "END_LOADING" });
-      dispatch({
-        type: "UPDATE_ALERT",
-        payload: {
-          open: true,
-          severity: "success",
-          title: lang.success,
-          message: lang.genrateCompleted,
-        },
-      });
+    captureQRCodeImage();
+    // Set hidden data and visibility logic
+    document.getElementById("passMessage").textContent = lang.passMessage;
+    document.getElementById("hiddenEndDate").textContent = formatDate(
+      Date.now() + 24 * 60 * 60 * 1000,
+      false
+    );
+    document.getElementById(
+      "hiddenData"
+    ).textContent = `${lang.name} : ${state.currentUser.name} ${lang.building} : ${state.currentUser.building} ${lang.apartment} : ${state.currentUser.flat}`;
+
+    document.getElementById("qrCode").style.visibility = "visible";
+    document.getElementById("qr-download").style.visibility = "visible";
+    document.getElementById("Message").style.visibility = "visible";
+    dispatch({ type: "END_LOADING" });
+    dispatch({
+      type: "UPDATE_ALERT",
+      payload: {
+        open: true,
+        severity: "success",
+        title: lang.success,
+        message: lang.genrateCompleted,
+      },
+    });
     } else {
       dispatch({ type: "END_LOADING" });
       dispatch({
@@ -124,11 +130,15 @@ function QRCodePanel() {
           open: true,
           severity: "error",
           title: lang.error,
-          message: lang.failed,
+          message: lang.failedGenerate,
         },});
     }
   }
-
+  async function captureQRCodeImage() {
+    const canvas = await html2canvas(pageRef.current, { scale: 2 });
+    const image = canvas.toDataURL("image/png");
+    setQrImageUrl(image); // Store the generated image URL
+  }
   async function getSharedToken() {
     const tokenDoc = await getDoc(doc(firestore, "common", "sharedToken"));
     if (tokenDoc.exists()) {
@@ -140,19 +150,16 @@ function QRCodePanel() {
   }
 
   async function handleDownload(element, imageFileName) {
-    
-    const textElements = element.querySelectorAll('p, h4, span, #passMessage, #hiddenData, #hiddenEndDate');
-      const originalColors = [];
-      
-      textElements.forEach((el, index) => {
-        originalColors[index] = el.style.color; // Save original color
-        el.style.color = 'black'; // Set to black for download
-      });
+    const textElements = element.querySelectorAll(
+      "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
+    );
+    const originalColors = [];
+
+    textElements.forEach((el, index) => {
+      originalColors[index] = el.style.color; // Save original color
+      el.style.color = "black"; // Set to black for download
+    });
     try {
-
-
-      
-
       const canvas = await html2canvas(element, { scale: 2 });
       const image = canvas.toDataURL("image/png");
       const link = document.createElement("a");
@@ -166,7 +173,6 @@ function QRCodePanel() {
         el.style.color = originalColors[index];
       });
     } catch (error) {
-      
       dispatch({
         type: "UPDATE_ALERT",
         payload: {
@@ -174,13 +180,146 @@ function QRCodePanel() {
           severity: "error",
           title: lang.error,
           message: lang.failed,
-        },});
+        },
+      });
 
-        textElements.forEach((el, index) => {
-          el.style.color = originalColors[index];
-        });
+      textElements.forEach((el, index) => {
+        el.style.color = originalColors[index];
+      });
     }
   }
+
+  const handleShare = async (element) => {
+    const textElements = element.querySelectorAll(
+      "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
+    );
+    
+    const originalColors = [];
+  
+    // Save original colors and set text color to black
+    textElements.forEach((el, index) => {
+      originalColors[index] = el.style.color;
+      el.style.color = "black"; // Set to black for download
+    });
+  
+    element.style.fontFamily = "Tajawal, sans-serif"; // Ensure the font is inline
+
+
+
+    let newFile;
+    try {
+  
+  
+
+    
+      // Convert the element to a Blob image using toBlob function
+      newFile = await toBlob(element); // Ensure toBlob is working correctly
+    } catch (error) {
+      console.error("Error generating the blob:", error);
+      return;
+    }
+  
+    const data = {
+      files: [
+        new File([newFile], "pass.png", {
+          type: newFile.type,
+        }),
+      ],
+      title: lang.darMisr,
+      text: lang.passMessage,
+    };
+  
+    // Share the content using the Web Share API
+    try {
+      if (navigator.canShare && navigator.canShare(data)) {
+        await navigator.share(data);
+      } else {
+        console.error("Sharing is not supported or the data cannot be shared.");
+      }
+    } catch (err) {
+      console.error("Error sharing:", err);
+    } finally {
+      // Always restore the original text colors
+      textElements.forEach((el, index) => {
+        el.style.color = originalColors[index];
+      });
+    }
+  };
+
+  // async function handleShare(element) {
+  //   const textElements = element.querySelectorAll(
+  //     "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
+  //   );
+  //   const originalColors = [];
+
+  //   textElements.forEach((el, index) => {
+  //     originalColors[index] = el.style.color; // Save original color
+  //     el.style.color = "black"; // Set to black for download
+  //   });
+
+  //   try {
+  //     const canvas = await html2canvas(element, { scale: 2 });
+  //     const image = canvas.toDataURL("image/png");
+
+  //     // Convert the base64 image to a Blob
+  //     const byteString = atob(image.split(",")[1]); // Decode base64 string
+  //     const arrayBuffer = new ArrayBuffer(byteString.length);
+  //     const uint8Array = new Uint8Array(arrayBuffer);
+
+  //     for (let i = 0; i < byteString.length; i++) {
+  //       uint8Array[i] = byteString.charCodeAt(i);
+  //     }
+
+  //     const blob = new Blob([uint8Array], { type: "image/png" });
+  //     const imageUrl = URL.createObjectURL(blob);
+
+  //     // Share via Web Share API
+  //     if (navigator.share) {
+  //       navigator
+  //         .share({
+  //           title: lang.darMisr,
+  //           text: lang.passMessage,
+  //           url: imageUrl, // This is the image URL to share
+  //         })
+  //         .catch((error) => {
+  //           console.error("Error sharing:", error);
+  //           dispatch({
+  //             type: "UPDATE_ALERT",
+  //             payload: {
+  //               open: true,
+  //               severity: "error",
+  //               title: lang.error,
+  //               message: lang.failed,
+  //             },
+  //           });
+  //         });
+  //     } else {
+  //       dispatch({
+  //         type: "UPDATE_ALERT",
+  //         payload: {
+  //           open: true,
+  //           severity: "warning",
+  //           title: lang.warning,
+  //           message: lang.shareUnsupported,
+  //         },
+  //       });
+  //     }
+  //   } catch (error) {
+  //     dispatch({
+  //       type: "UPDATE_ALERT",
+  //       payload: {
+  //         open: true,
+  //         severity: "error",
+  //         title: lang.error,
+  //         message: lang.failed,
+  //       },
+  //     });
+
+  //     textElements.forEach((el, index) => {
+  //       el.style.color = originalColors[index];
+  //     });
+  //   }
+  // }
 
   function formatDate(string, bool) {
     const options = {
@@ -236,10 +375,9 @@ function QRCodePanel() {
         }}
       >
         <div id="Message" style={{ visibility: "hidden" }}>
-          
-        <Typography id="passMessage" variant="body">
-          {passMessage}
-        </Typography>
+          <Typography id="passMessage" variant="body">
+            {passMessage}
+          </Typography>
         </div>
       </Box>
       <div id="qr-download" style={{ visibility: "hidden" }}>
@@ -247,17 +385,30 @@ function QRCodePanel() {
           sx={{
             padding: 1,
             display: "flex",
-            flexDirection: "column",
+            flexDirection: "row",
             alignItems: "center",
             textAlign: "center",
+            justifyContent: "center",
+            gap: 2,
           }}
         >
           <Button
             variant="contained"
             onClick={() => handleDownload(pageRef.current, "pass.png")}
           >
-            {isRtl ? ar.download : en.download}
+            <DownloadingRounded />
           </Button>
+
+          {qrImageUrl && (
+            <>
+              <Button
+                variant="contained"
+                onClick={() => handleShare(pageRef.current)}
+              >
+                <ShareRounded />
+              </Button>
+            </>
+          )}
         </Box>
       </div>
     </Container>
