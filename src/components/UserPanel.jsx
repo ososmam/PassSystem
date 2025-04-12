@@ -8,7 +8,7 @@ import {
   Paper,
   CssBaseline,
 } from "@mui/material";
-
+import { motion } from "framer-motion"; // Import Framer Motion
 import en from "../../src/locales/en.json";
 import ar from "../../src/locales/ar.json";
 
@@ -20,15 +20,8 @@ function UserPanel() {
   const navigate = useNavigate();
   const { state } = useValue();
   const { isRtl } = useContext(RtlContext);
-  const { dispatch } = useValue();
 
   const lang = isRtl ? ar : en;
-  const Item = styled(Paper)(({ theme }) => ({
-    backgroundColor: theme.palette.mode === "dark" ? "#1A2027" : "#fff",
-    ...theme.typography.body2,
-    padding: theme.spacing(1),
-    textAlign: "center",
-  }));
 
   const Panel = styled(Paper)(({ theme }) => ({
     backgroundColor: theme.palette.mode === "dark" ? "#1A2027" : "#FCFCFC",
@@ -45,31 +38,59 @@ function UserPanel() {
     navigate("/pass");
   }
 
+  // Framer Motion animations
+  const containerVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+  };
+
+  const logoVariants = {
+    hidden: { scale: 0.8, opacity: 0 },
+    visible: { scale: 1, opacity: 1, transition: { duration: 0.5, delay: 0.2 } },
+  };
+
+  const buttonVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, delay: 0.4 } },
+  };
+
   return (
     <Container component="main" maxWidth="xs">
       <CssBaseline />
       <Box
+        component={motion.div} // Animate the container
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
         sx={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
         }}
       >
-        <Panel sx={{ width: "100%" }}>
-          <img
+        <Panel
+          sx={{ width: "100%" }}
+          component={motion.div} // Animate the panel
+          variants={containerVariants}
+        >
+          <motion.img
             src={require("../images/logo192.png")}
             width={100}
             height={"auto"}
             alt=""
+            variants={logoVariants} // Animate the logo
+            initial="hidden"
+            animate="visible"
           />
           <br />
 
-          <Item sx={{ width: "90%" }}>
+          <Paper sx={{ width: "90%", padding: 2 }}>
             <Typography variant="h6">
               {lang.welcome} {state.currentUser.name}
             </Typography>
-          </Item>
+          </Paper>
 
+          <motion.div variants={buttonVariants} initial="hidden" animate="visible">
             <Button
               id="generate"
               fullWidth
@@ -79,9 +100,11 @@ function UserPanel() {
             >
               {lang.genrate}
             </Button>
+          </motion.div>
         </Panel>
       </Box>
     </Container>
   );
 }
+
 export default UserPanel;

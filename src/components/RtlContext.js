@@ -5,7 +5,7 @@ export const RtlContext = createContext();
 
 // Create a provider component
 export const RtlProvider = ({ children }) => {
-  const [isRtl, setIsRtl] = useState(false);
+  const [isRtl, setIsRtl] = useState(true);
   const toggleRtl = () => {
     setIsRtl((prev) => !prev);
   };

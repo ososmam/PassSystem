@@ -1,7 +1,14 @@
 import React, { useContext, useState, useRef, useEffect } from "react";
 import QRCode from "react-qr-code";
 import Button from "@mui/material/Button";
-import { Box, Typography, Container } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Container,
+  styled,
+  Paper,
+  CssBaseline,
+} from "@mui/material";
 import { ShareRounded, DownloadingRounded } from "@mui/icons-material";
 import axios from "axios";
 import en from "../../src/locales/en.json";
@@ -9,24 +16,24 @@ import ar from "../../src/locales/ar.json";
 import { firestore } from "./firebaseApp";
 import * as html2canvas from "html2canvas";
 import {
-  collection,
-  query,
-  where,
-  getDocs,
   getDoc,
   doc,
-} from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-import { uid } from "./UserPanel";
 import { useValue } from "./ContextProvider";
 import { RtlContext } from "./RtlContext";
 
 import { toBlob } from "html-to-image";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+
 function QRCodePanel() {
   const [qrCodeComponent, setQRCodeComponent] = useState(null);
   const { state } = useValue();
   const { isRtl } = useContext(RtlContext);
   const { dispatch } = useValue();
+
+  const navigate = useNavigate();
 
   const [passMessage, setPassMessage] = useState("");
   const [hiddenEndDate, setHiddenEndDate] = useState("");
@@ -35,24 +42,43 @@ function QRCodePanel() {
   const [qrImageUrl, setQrImageUrl] = useState("");
 
   const lang = isRtl ? ar : en;
-
+  const [endDate, setEndDate] = useState(
+    formatDate(Date.now() + 24 * 60 * 60 * 1000, false)
+  );
   const pageRef = useRef();
 
-  const hasGeneratedQR = useRef(false); // Ref to track whether the QR code is already generated
-
-  useEffect(() => {
-    if (!hasGeneratedQR.current) {
-      GenerateQRCode(); // Call QR code generation once on component load
-      hasGeneratedQR.current = true; // Mark it as generated
+  // const hasGeneratedQR = useRef(false); // Ref to track whether the QR code is already generated
+  const [selectedGate, setSelectedGate] = useState(0); // State for selected gate (1 or 3)
+  const getGateName = (gateNumber) => {
+    switch(gateNumber) {
+      case 1: return lang.gate1;
+      case 3: return lang.gate3;
+      case 4: return lang.gate4;
+      default: return lang.gate1; // Default to Gate 1
     }
-  }, []); // This effect only runs once, right after the initial render
-
+  };
+  // useEffect(() => {
+  //   if (!hasGeneratedQR.current) {
+  //     GenerateQRCode(); // Call QR code generation once on component load
+  //     hasGeneratedQR.current = true; // Mark it as generated
+  //   }
+  // }, []); // This effect only runs once, right after the initial render
+  useEffect(() => {
+    if (selectedGate === 0) return;
+    else {
+      GenerateQRCode();
+    }
+  }, [selectedGate]);
   useEffect(() => {
     // This will run whenever the language changes
     setPassMessage(lang.passMessage);
-    setHiddenEndDate(formatDate(Date.now() + 24 * 60 * 60 * 1000, false));
+
+    let selectedGateName = 
+    setHiddenEndDate(
+      endDate + ` | ${getGateName}`
+    );
     setHiddenData(
-      `${lang.name} : ${state.currentUser.name} ${lang.building} : ${state.currentUser.building} ${lang.apartment} : ${state.currentUser.flat}`
+      `${lang.name} : ${state.currentUser.name} | ${lang.building} : ${state.currentUser.building} | ${lang.apartment} : ${state.currentUser.flat}`
     );
   }, [lang, state.currentUser]);
 
@@ -70,70 +96,115 @@ function QRCodePanel() {
           severity: "error",
           title: lang.error,
           message: lang.failed,
-        },});
+        },
+      });
       return;
     }
 
-    const json = JSON.stringify({ hostID: state.currentUser.id });
-
-    const response = await axios.post(
-      "https://darmasr.ddns.net/api/Visitor/AddVisitor",
-      json,
-      {
-        headers: {
-          "X-Internal": "web_APP",
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
-      }
-    );
-
-    if (response.status === 200) {
-      const cardNo = response.data["cardNo"];
-
-      if (!qrCodeComponent) {
-        setQRCodeComponent(
-          <QRCode size={280} fgColor="#2D8736" value={cardNo.toString()} />
-        );
-      }
-
-
-    captureQRCodeImage();
-    // Set hidden data and visibility logic
-    document.getElementById("passMessage").textContent = lang.passMessage;
-    document.getElementById("hiddenEndDate").textContent = formatDate(
-      Date.now() + 24 * 60 * 60 * 1000,
-      false
-    );
-    document.getElementById(
-      "hiddenData"
-    ).textContent = `${lang.name} : ${state.currentUser.name} ${lang.building} : ${state.currentUser.building} ${lang.apartment} : ${state.currentUser.flat}`;
-
-    document.getElementById("qrCode").style.visibility = "visible";
-    document.getElementById("qr-download").style.visibility = "visible";
-    document.getElementById("Message").style.visibility = "visible";
-    dispatch({ type: "END_LOADING" });
-    dispatch({
-      type: "UPDATE_ALERT",
-      payload: {
-        open: true,
-        severity: "success",
-        title: lang.success,
-        message: lang.genrateCompleted,
-      },
+    const json = JSON.stringify({
+      hostId: state.currentUser.id,
+      gateId: selectedGate,
     });
-    } else {
+
+    try {
+      const response = await axios.post(
+        "https://gh.darmasr2.com/api/Visitor/AddVisitor",
+        json,
+        {
+          headers: {
+            "X-Internal": "web_APP",
+            "Content-Type": "application/json",
+            "Accept-Language": isRtl ? "ar" : "en",
+            Authorization: "Bearer " + token,
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        const cardNo = response.data["cardNo"];
+        console.error("response:", response.data);
+
+        if (response.data["gatesResult"][0]["success"]) {
+          if (!qrCodeComponent) {
+            setQRCodeComponent(
+              <QRCode size={280} fgColor="#00000" value={cardNo.toString()} />
+            );
+            setEndDate(formatDate(Date.now() + 24 * 60 * 60 * 1000, false));
+          }
+        } else {
+          dispatch({ type: "END_LOADING" });
+          setSelectedGate(0);
+          dispatch({
+            type: "UPDATE_ALERT",
+            payload: {
+              open: true,
+              severity: "error",
+              title: lang.error,
+              message: lang.failedGenerate,
+            },
+          });
+          return;
+        }
+
+        captureQRCodeImage();
+        // Set hidden data and visibility logic
+
+        setPassMessage(lang.passMessage);
+        setHiddenEndDate(
+          endDate + ` | ${getGateName(selectedGate)}`
+        );
+        setHiddenData(
+          `${lang.name} : ${state.currentUser.name} | ${lang.building} : ${state.currentUser.building} | ${lang.apartment} : ${state.currentUser.flat}`
+        );
+
+        document.getElementById("qrCode").style.visibility = "visible";
+        document.getElementById("qr-download").style.visibility = "visible";
+        document.getElementById("Message").style.visibility = "visible";
+        dispatch({ type: "END_LOADING" });
+        dispatch({
+          type: "UPDATE_ALERT",
+          payload: {
+            open: true,
+            severity: "success",
+            title: lang.success,
+            message: lang.genrateCompleted,
+          },
+        });
+      }
+    } catch (error) {
+      // Handle 400 status with specific message
       dispatch({ type: "END_LOADING" });
-      dispatch({
-        type: "UPDATE_ALERT",
-        payload: {
-          open: true,
-          severity: "error",
-          title: lang.error,
-          message: lang.failedGenerate,
-        },});
+
+      if (
+        error.response &&
+        error.response.status === 400 &&
+        error.response.data === "Visitor creation limit reached for today."
+      ) {
+        navigate("/home");
+        dispatch({
+          type: "UPDATE_ALERT",
+          payload: {
+            open: true,
+            severity: "error",
+            title: lang.error,
+            message: lang.maxPassReached,
+          },
+        });
+      } else {
+        navigate("/home");
+        dispatch({
+          type: "UPDATE_ALERT",
+          payload: {
+            open: true,
+            severity: "error",
+            title: lang.error,
+            message: lang.failedGenerate,
+          },
+        });
+      }
     }
   }
+
   async function captureQRCodeImage() {
     const canvas = await html2canvas(pageRef.current, { scale: 2 });
     const image = canvas.toDataURL("image/png");
@@ -189,46 +260,62 @@ function QRCodePanel() {
     }
   }
 
+
+  const getGateMessage = (selectedGate) => {
+    let gateLocation;
+    switch(selectedGate) {
+      case 1:
+        gateLocation = lang.Gate1Location;
+        break;
+      case 3:
+        gateLocation = lang.Gate3Location;
+        break;
+      case 4:
+        gateLocation = lang.Gate4Location;
+        break;
+      default:
+        gateLocation = lang.Gate1Location; // default to Gate 1
+    }
+    
+    return `${lang.passMessage}\n${gateLocation}`;
+  };
+
+
   const handleShare = async (element) => {
     const textElements = element.querySelectorAll(
       "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
     );
-    
+
     const originalColors = [];
-  
+    const originalBackground = element.style.backgroundColor;
+
     // Save original colors and set text color to black
     textElements.forEach((el, index) => {
       originalColors[index] = el.style.color;
       el.style.color = "black"; // Set to black for download
     });
-  
+    element.style.backgroundColor = "white";
     element.style.fontFamily = "Tajawal, sans-serif"; // Ensure the font is inline
-
-
 
     let newFile;
     try {
-  
-  
-
-    
       // Convert the element to a Blob image using toBlob function
       newFile = await toBlob(element); // Ensure toBlob is working correctly
     } catch (error) {
       console.error("Error generating the blob:", error);
       return;
     }
-  
+
     const data = {
       files: [
-        new File([newFile], "pass.png", {
+        new File([newFile], "pass.jpg", {
           type: newFile.type,
         }),
       ],
       title: lang.darMisr,
-      text: lang.passMessage,
+      text:getGateMessage(selectedGate),
     };
-  
+
     // Share the content using the Web Share API
     try {
       if (navigator.canShare && navigator.canShare(data)) {
@@ -242,84 +329,10 @@ function QRCodePanel() {
       // Always restore the original text colors
       textElements.forEach((el, index) => {
         el.style.color = originalColors[index];
+        element.style.backgroundColor = originalBackground;
       });
     }
   };
-
-  // async function handleShare(element) {
-  //   const textElements = element.querySelectorAll(
-  //     "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
-  //   );
-  //   const originalColors = [];
-
-  //   textElements.forEach((el, index) => {
-  //     originalColors[index] = el.style.color; // Save original color
-  //     el.style.color = "black"; // Set to black for download
-  //   });
-
-  //   try {
-  //     const canvas = await html2canvas(element, { scale: 2 });
-  //     const image = canvas.toDataURL("image/png");
-
-  //     // Convert the base64 image to a Blob
-  //     const byteString = atob(image.split(",")[1]); // Decode base64 string
-  //     const arrayBuffer = new ArrayBuffer(byteString.length);
-  //     const uint8Array = new Uint8Array(arrayBuffer);
-
-  //     for (let i = 0; i < byteString.length; i++) {
-  //       uint8Array[i] = byteString.charCodeAt(i);
-  //     }
-
-  //     const blob = new Blob([uint8Array], { type: "image/png" });
-  //     const imageUrl = URL.createObjectURL(blob);
-
-  //     // Share via Web Share API
-  //     if (navigator.share) {
-  //       navigator
-  //         .share({
-  //           title: lang.darMisr,
-  //           text: lang.passMessage,
-  //           url: imageUrl, // This is the image URL to share
-  //         })
-  //         .catch((error) => {
-  //           console.error("Error sharing:", error);
-  //           dispatch({
-  //             type: "UPDATE_ALERT",
-  //             payload: {
-  //               open: true,
-  //               severity: "error",
-  //               title: lang.error,
-  //               message: lang.failed,
-  //             },
-  //           });
-  //         });
-  //     } else {
-  //       dispatch({
-  //         type: "UPDATE_ALERT",
-  //         payload: {
-  //           open: true,
-  //           severity: "warning",
-  //           title: lang.warning,
-  //           message: lang.shareUnsupported,
-  //         },
-  //       });
-  //     }
-  //   } catch (error) {
-  //     dispatch({
-  //       type: "UPDATE_ALERT",
-  //       payload: {
-  //         open: true,
-  //         severity: "error",
-  //         title: lang.error,
-  //         message: lang.failed,
-  //       },
-  //     });
-
-  //     textElements.forEach((el, index) => {
-  //       el.style.color = originalColors[index];
-  //     });
-  //   }
-  // }
 
   function formatDate(string, bool) {
     const options = {
@@ -334,9 +347,110 @@ function QRCodePanel() {
       options
     );
   }
+  const Panel = styled(Paper)(({ theme }) => ({
+    backgroundColor: theme.palette.mode === "dark" ? "#1A2027" : "#FCFCFC",
+    alignItems: "center",
+    display: "flex",
+    flexDirection: "column",
+    padding: theme.spacing(3),
+    textAlign: "center",
+  }));
 
+  const containerVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+  };
+
+  const logoVariants = {
+    hidden: { scale: 0.8, opacity: 0 },
+    visible: {
+      scale: 1,
+      opacity: 1,
+      transition: { duration: 0.5, delay: 0.2 },
+    },
+  };
+  const buttonVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, delay: 0.6 } },
+  };
   return (
     <Container component="main" maxWidth="xs">
+      {selectedGate === 0 && (
+        <>
+          <div id="gateSelection">
+            <CssBaseline />
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+              }}
+              component={motion.div} // Animate the container
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              <Panel
+                sx={{ width: "100%" }}
+                component={motion.div} // Animate the panel
+                variants={containerVariants}
+              >
+                <motion.img
+                  src={require("../images/logo192.png")}
+                  width={100}
+                  height={"auto"}
+                  alt=""
+                  variants={logoVariants} // Animate the logo
+                  initial="hidden"
+                  animate="visible"
+                />
+                <motion.div
+                  variants={buttonVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <br />
+                  <Typography variant="h5">{lang.selectGate}</Typography>
+
+                  <Button
+                    disabled={true}
+                    variant="contained"
+                    sx={{ mt: 3, mb: 1.5 }}
+                    fullWidth
+                    onClick={() => {
+                      setSelectedGate(1);
+                    }}
+                  >
+                    {lang.gate1}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    sx={{ mt: 1.5, mb: 2 }}
+                    fullWidth
+                    onClick={() => {
+                      setSelectedGate(3);
+                    }}
+                  >
+                    {lang.gate3}
+                  </Button>
+
+                  <Button
+                    //  disabled={true}
+                    variant="contained"
+                    sx={{ mt: 1.5, mb: 2 }}
+                    fullWidth
+                    onClick={() => {
+                      setSelectedGate(4);
+                    }}
+                  >
+                    {lang.gate4}
+                  </Button>
+                </motion.div>
+              </Panel>
+            </Box>
+          </div>
+        </>
+      )}
       <div id="qrCode" ref={pageRef} style={{ visibility: "hidden" }}>
         <Box
           sx={{
@@ -346,12 +460,19 @@ function QRCodePanel() {
             alignItems: "center",
             textAlign: "center",
           }}
+          component={motion.div} // Animate the container
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
         >
-          <img
+          <motion.img
             src={require("../images/logo192.png")}
             width={50}
             height="auto"
             alt=""
+            variants={logoVariants} // Animate the logo
+            initial="hidden"
+            animate="visible"
           />
           <Typography variant="h4">{lang.darMisr}</Typography>
           <br />
@@ -365,6 +486,7 @@ function QRCodePanel() {
           </Typography>
         </Box>
       </div>
+
       <Box
         sx={{
           padding: 1,
@@ -373,6 +495,10 @@ function QRCodePanel() {
           alignItems: "center",
           textAlign: "center",
         }}
+        component={motion.div} // Animate the container
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
       >
         <div id="Message" style={{ visibility: "hidden" }}>
           <Typography id="passMessage" variant="body">
@@ -391,6 +517,10 @@ function QRCodePanel() {
             justifyContent: "center",
             gap: 2,
           }}
+          component={motion.div} // Animate the container
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
         >
           <Button
             variant="contained"

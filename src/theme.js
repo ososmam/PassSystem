@@ -162,22 +162,22 @@ export const themeSettings = (mode, isRtl) => {
     },
     typography: {
       fontFamily: ["Tajawal", "sans-serif"].join(","),
-      fontSize: 16,
+      fontSize: 15,
       h1: {
         fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 42,
+        fontSize: 40,
       },
       h2: {
         fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 36,
+        fontSize: 32,
       },
       h3: {
         fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 28,
+        fontSize: 24,
       },
       h4: {
         fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 24,
+        fontSize: 22,
       },
       h5: {
         fontFamily: ["Tajawal", "sans-serif"].join(","),
@@ -186,6 +186,14 @@ export const themeSettings = (mode, isRtl) => {
       h6: {
         fontFamily: ["Tajawal", "sans-serif"].join(","),
         fontSize: 16,
+      },
+      v: {
+        fontFamily: ["Tajawal", "sans-serif"].join(","),
+        fontSize: 10,
+      },
+      sub: {
+        fontFamily: ["Tajawal", "sans-serif"].join(","),
+        fontSize: 14,
       },
     },
   };

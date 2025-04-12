@@ -1,17 +1,24 @@
 {
   "name": "Dar-Masr-Pass",
-  "version": "1.0.0",
+  "version": "1.1.5 ",
   "private": true,
   "dependencies": {
+    "@azure/storage-blob": "^12.25.0",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@mui/icons-material": "^5.15.15",
     "@mui/material": "^5.15.15",
+    "@mui/x-date-pickers": "^7.22.2",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.7.7",
+    "buffer": "^6.0.3",
+    "dayjs": "^1.11.13",
     "dom-to-image-more": "^3.3.0",
+    "firebase": "^11.0.2",
+    "framer-motion": "^11.12.0",
+    "heic2any": "^0.0.4",
     "html-to-image": "^1.11.11",
     "html2canvas": "^1.4.1",
     "particles-bg": "^2.5.5",
@@ -30,7 +37,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "deploy": "firebase build"
+    "deploy": "npm run build && firebase deploy"
   },
   "eslintConfig": {
     "extends": [
