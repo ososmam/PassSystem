@@ -285,10 +285,10 @@ function QRCodePanel() {
     const textElements = element.querySelectorAll(
       "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
     );
-
+  
     const originalColors = [];
     const originalBackground = element.style.backgroundColor;
-
+  
     // Save original colors and set text color to black
     textElements.forEach((el, index) => {
       originalColors[index] = el.style.color;
@@ -296,7 +296,7 @@ function QRCodePanel() {
     });
     element.style.backgroundColor = "white";
     element.style.fontFamily = "Tajawal, sans-serif"; // Ensure the font is inline
-
+  
     let newFile;
     try {
       // Convert the element to a Blob image using toBlob function
@@ -305,7 +305,8 @@ function QRCodePanel() {
       console.error("Error generating the blob:", error);
       return;
     }
-
+  
+    // Create the share data with both image and text
     const data = {
       files: [
         new File([newFile], "pass.jpg", {
@@ -313,18 +314,38 @@ function QRCodePanel() {
         }),
       ],
       title: lang.darMisr,
-      text:getGateMessage(selectedGate),
+      text: `${lang.passMessage}\n${getGateName(selectedGate)}\n${hiddenData}\n${hiddenEndDate}`
     };
-
+  
     // Share the content using the Web Share API
     try {
       if (navigator.canShare && navigator.canShare(data)) {
         await navigator.share(data);
       } else {
-        console.error("Sharing is not supported or the data cannot be shared.");
+        // Fallback for browsers that don't support sharing files
+        await navigator.share({
+          title: lang.darMisr,
+          text: data.text,
+          url: qrImageUrl // Share the image URL if available
+        });
       }
     } catch (err) {
       console.error("Error sharing:", err);
+      // Fallback copy to clipboard
+      try {
+        await navigator.clipboard.writeText(data.text);
+        dispatch({
+          type: "UPDATE_ALERT",
+          payload: {
+            open: true,
+            severity: "info",
+            title: lang.info,
+            message: lang.copiedToClipboard,
+          },
+        });
+      } catch (clipboardErr) {
+        console.error("Copy to clipboard failed:", clipboardErr);
+      }
     } finally {
       // Always restore the original text colors
       textElements.forEach((el, index) => {

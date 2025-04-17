@@ -67,6 +67,7 @@ function Register() {
   const [passwordHint, setPasswordHint] = useState("");
   const [phone, setPhone] = useState("");
   const [type, setType] = useState("");
+  const [userFound, setUserFound] = useState(false);
   const [rentEndDate, setRentEndDate] = useState(null);
 
   const [termsChecked, setTermsChecked] = useState(false);
@@ -226,7 +227,7 @@ function Register() {
       dispatch({ type: "START_LOADING" });
       const querySnapshot = await getDocs(
         query(
-          collection(firestore, "hosts"),
+          collection(firestore, "unverified"),
           where("building", "==", parseInt(building)),
           where("flat", "==", parseInt(flat)),
           where("phone", "==", phone.substring(1)),
@@ -252,6 +253,7 @@ function Register() {
         const propertyDoc = querySnapshot.docs[0];
 
         dispatch({ type: "END_LOADING" });
+        setUserFound(true);
         toggleDialog();
       } else {
         dispatch({ type: "END_LOADING" });
@@ -289,8 +291,8 @@ function Register() {
     setPasswordHint("");
     setDialogOpen(false); // Close dialog
     setFileErrors({}); // Clear file errors
+    setUserFound(false);
   };
-
 
   useEffect(() => {
     if (contractFile) {
@@ -304,15 +306,11 @@ function Register() {
     }
   }, [idFile]);
   const handleFileUpload = async () => {
-    
-    
-    
     try {
-
       if (contractFile && idFile && contractFile.name === idFile.name) {
         setFileErrors({
           contract: lang.sameFileError,
-          id: lang.sameFileError
+          id: lang.sameFileError,
         });
         return;
       }
@@ -328,7 +326,7 @@ function Register() {
       );
       const idPhotoUrl = await uploadFileWithAxios(idFile, "ids", hostId);
 
-      const newHostRef = doc(firestore, "hosts", hostId);
+      const newHostRef = doc(firestore, "unverified", hostId);
 
       const hostData = {
         name: name,
@@ -349,8 +347,7 @@ function Register() {
       const userEmail = `${phone.substring(1)}@dm2.test`; // Use phone as email
 
       await createUserWithEmailAndPassword(firebaseAuth, userEmail, password);
-
-      await setDoc(newHostRef, hostData);
+      await setDoc(newHostRef, hostData, { merge: true });
       // Continue registration after file upload
       setIsUploading(false);
       dispatch({ type: "END_LOADING" });
@@ -783,11 +780,17 @@ function Register() {
       >
         <DialogTitle>{lang.uploadFiles}</DialogTitle>
         <DialogContent>
-        <FormHelperText sx={{ whiteSpace: 'pre-line', color: {color:"red"}, fontSize: '0.75rem' }}>
-                  {lang.uploadInstructions}
-                </FormHelperText>  
+          <FormHelperText
+            sx={{
+              whiteSpace: "pre-line",
+              color: { color: "red" },
+              fontSize: "0.75rem",
+            }}
+          >
+            {lang.uploadInstructions}
+          </FormHelperText>
           {/* File upload status or feedback */}
-          {contractFile && idFile && idFile.name !==contractFile.name && (
+          {contractFile && idFile && idFile.name !== contractFile.name && (
             <FormHelperText sx={{ color: "green" }}>
               {lang.filesReadyToUpload}
             </FormHelperText>
@@ -796,7 +799,6 @@ function Register() {
           {/* File Upload Components */}
           <Grid container spacing={2}>
             <Grid item xs={12}>
-            
               <FileUpload
                 label={lang.contract} // Localized label
                 onFileChange={(file, error) => {
@@ -808,21 +810,21 @@ function Register() {
                     if (idFile && file.name === idFile.name) {
                       setFileErrors({
                         contract: lang.sameFileError,
-                        id: lang.sameFileError
+                        id: lang.sameFileError,
                       });
                     }
                   }
                 }}
                 error={fileErrors.contract}
-                
               />
-<FormHelperText sx={{ color: {color:"primary"}, fontSize: '0.75rem' }}>
-                  {lang.contractHint}
-                </FormHelperText>
+              <FormHelperText
+                sx={{ color: { color: "primary" }, fontSize: "0.75rem" }}
+              >
+                {lang.contractHint}
+              </FormHelperText>
             </Grid>
 
             <Grid item xs={12}>
-            
               <FileUpload
                 label={lang.idPhoto} // Localized label
                 onFileChange={(file, error) => {
@@ -834,17 +836,18 @@ function Register() {
                     if (contractFile && file.name === contractFile.name) {
                       setFileErrors({
                         contract: lang.sameFileError,
-                        id: lang.sameFileError
+                        id: lang.sameFileError,
                       });
                     }
                   }
                 }}
                 error={fileErrors.id}
-
               />
-              <FormHelperText sx={{ color: {color:"primary"}, fontSize: '0.75rem' }}>
-                  {lang.idHint}
-                </FormHelperText>
+              <FormHelperText
+                sx={{ color: { color: "primary" }, fontSize: "0.75rem" }}
+              >
+                {lang.idHint}
+              </FormHelperText>
             </Grid>
           </Grid>
 
@@ -858,8 +861,12 @@ function Register() {
           <Button
             onClick={handleFileUpload}
             color="primary"
-            disabled={!contractFile || !idFile || isUploading || 
-              (contractFile && idFile && contractFile.name === idFile.name)}
+            disabled={
+              !contractFile ||
+              !idFile ||
+              isUploading ||
+              (contractFile && idFile && contractFile.name === idFile.name)
+            }
           >
             {isUploading ? lang.uploading : lang.upload}
           </Button>

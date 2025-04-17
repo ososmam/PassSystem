@@ -25,10 +25,9 @@ import FloatingButton from "./components/FloatingButton";
 function App() {
   const { isRtl } = useRtl();
   const [theme, colorMode] = useMode(isRtl);
-  const { state } = useValue();
+  const { state, dispatch } = useValue();
   const isLoggedIn = state.currentUser !== null;
   const [isSidebar, setIsSidebar] = useState(true);
-
   const cacheLtr = createCache({
     key: "muiltr",
   });
@@ -52,7 +51,47 @@ function App() {
   // const [alignment, setAlignment] = React.useState(isRtl ? "ar" : "en");
 
   const [isRegistering, setIsRegistering] = useState(false);
+// 2. Disable Console in Production
+useEffect(() => {
+  if (process.env.NODE_ENV === 'production') {
+    console.log = function() {};
+    console.info = function() {};
+    console.warn = function() {};
+    console.error = function() {};
+    console.debug = function() {};
+    
+    Object.defineProperty(window, 'console', {
+      value: console,
+      writable: false,
+      configurable: false
+    });
+  }
+}, []);
 
+// 3. Detect Console Tampering
+// useEffect(() => {
+//   if (process.env.NODE_ENV === 'production') {
+//     const checkConsole = () => {
+//       if (window.outerWidth - window.innerWidth > 200 || 
+//           window.outerHeight - window.innerHeight > 200) {
+//         dispatch({
+//           type: "UPDATE_ALERT",
+//           payload: {
+//             open: true,
+//             severity: "error",
+//             message: isRtl ? "تم اكتشاف انتهاك أمني" : "Security violation detected"
+//           }
+//         });
+//         dispatch({
+//           type: "START_LOADING"});
+//         window.location.reload();
+//       }
+//     };
+
+//     const interval = setInterval(checkConsole, 1000);
+//     return () => clearInterval(interval);
+//   }
+// }, [isRtl, dispatch]);
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       if (user) {
