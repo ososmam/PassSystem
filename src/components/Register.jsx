@@ -1,13 +1,10 @@
 import React, { useState, useContext, useEffect } from "react";
 import {
   collection,
-  query,
-  where,
-  getDocs,
+  getDoc,
   setDoc,
   doc,
   Timestamp,
-  updateDoc,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import { firestore, firebaseAuth } from "./firebaseApp";
@@ -224,41 +221,7 @@ function Register() {
     }
 
     try {
-      dispatch({ type: "START_LOADING" });
-      const querySnapshot = await getDocs(
-        query(
-          collection(firestore, "unverified"),
-          where("building", "==", parseInt(building)),
-          where("flat", "==", parseInt(flat)),
-          where("phone", "==", phone.substring(1)),
-          where("type", "==", type)
-        )
-      );
-
-      const hostData = {
-        name: name,
-        building: parseInt(building),
-        flat: parseInt(flat),
-        phone: phone.substring(1),
-        type: type,
-      };
-
-      if (type === "rent") {
-        const dateObject = dayjs(rentEndDate).toDate();
-        hostData.endDate = Timestamp.fromDate(dateObject);
-        console.log(hostData.endDate);
-      }
-
-      if (!querySnapshot.empty) {
-        const propertyDoc = querySnapshot.docs[0];
-
-        dispatch({ type: "END_LOADING" });
-        setUserFound(true);
-        toggleDialog();
-      } else {
-        dispatch({ type: "END_LOADING" });
-        toggleDialog();
-      }
+      toggleDialog();
     } catch (error) {
       console.error("Error during registration:", error);
       dispatch({
@@ -307,6 +270,15 @@ function Register() {
   }, [idFile]);
   const handleFileUpload = async () => {
     try {
+      // Validate files before upload
+      if (!contractFile || !idFile) {
+        setFileErrors({
+          contract: !contractFile ? lang.fileRequired : "",
+          id: !idFile ? lang.fileRequired : "",
+        });
+        return;
+      }
+
       if (contractFile && idFile && contractFile.name === idFile.name) {
         setFileErrors({
           contract: lang.sameFileError,
@@ -317,42 +289,100 @@ function Register() {
 
       setIsUploading(true);
       dispatch({ type: "START_LOADING" });
-      const hostId = `${building}-${flat}${type.charAt(0).toLocaleLowerCase()}`;
-      // Upload the contract and ID files
-      const contractUrl = await uploadFileWithAxios(
-        contractFile,
-        "contracts",
-        hostId
-      );
-      const idPhotoUrl = await uploadFileWithAxios(idFile, "ids", hostId);
 
-      const newHostRef = doc(firestore, "unverified", hostId);
+      const hostId = `${building}-${flat}${type.charAt(0).toLocaleLowerCase()}`;
+      const verifiedRef = doc(firestore, "hosts", hostId);
+      const verifiedSnap = await getDoc(verifiedRef);
 
       const hostData = {
         name: name,
         building: parseInt(building),
         flat: parseInt(flat),
-        phone: phone.substring(1),
         type: type,
-        contract: contractUrl,
-        idPhoto: idPhotoUrl,
         verified: false,
       };
 
+      if (verifiedSnap.exists()) {
+        const verifiedData = verifiedSnap.data();
+
+        if (verifiedData.verified === true) {
+
+
+          if (
+            verifiedData.phone === phone.substring(1) ||
+            verifiedData.secondPhone === phone.substring(1)
+          ) {
+            throw new Error(lang.userAlreadyExists);
+          }
+
+          if (verifiedData.phone && verifiedData.secondPhone) {
+            throw new Error(lang.maxUsersPerUnit);
+          }
+          hostData.name = verifiedData.name.toString();
+          hostData.phone = verifiedData.phone.toString();
+          hostData.secondPhone = phone.substring(1);
+        } else {
+          hostData.phone = phone.substring(1);
+        }
+      } else {
+        hostData.phone = phone.substring(1);
+      }
+
+      // Upload files with error handling
+      let contractUrl, idPhotoUrl;
+      try {
+        contractUrl = await uploadFileWithAxios(
+          contractFile,
+          "contracts",
+          hostId
+        );
+        idPhotoUrl = await uploadFileWithAxios(idFile, "ids", hostId);
+      } catch (uploadError) {
+        console.error("File upload failed:", uploadError);
+        throw new Error(lang.fileUploadFailed);
+      }
+
+      // Validate URLs were received
+      if (!contractUrl || !idPhotoUrl) {
+        throw new Error(lang.fileUploadFailed);
+      }
+
+      const newHostRef = doc(firestore, "unverified", hostId);
+
+      hostData.contract = contractUrl;
+      hostData.idPhoto = idPhotoUrl;
+
       if (type === "rent") {
+        if (!rentEndDate) {
+          throw new Error(lang.rentEndDateRequired);
+        }
         const dateObject = dayjs(rentEndDate).toDate();
         hostData.endDate = Timestamp.fromDate(dateObject);
-        console.log(hostData.endDate);
       }
-      const userEmail = `${phone.substring(1)}@dm2.test`; // Use phone as email
 
-      await createUserWithEmailAndPassword(firebaseAuth, userEmail, password);
-      await setDoc(newHostRef, hostData, { merge: true });
-      // Continue registration after file upload
+      const userEmail = `${phone.substring(1)}@dm2.test`;
+
+      // Create user and save data with error handling
+      try {
+        await createUserWithEmailAndPassword(firebaseAuth, userEmail, password);
+        await setDoc(newHostRef, hostData, { merge: true });
+      } catch (authError) {
+        console.error("Authentication error:", authError);
+        // Handle specific auth errors
+        if (authError.code === "auth/email-already-in-use") {
+          throw new Error(lang.userAlreadyExists);
+        } else if (authError.code === "auth/weak-password") {
+          throw new Error(lang.weakPassword);
+        } else {
+          throw new Error(lang.registrationFailed);
+        }
+      }
+
+      // Success flow
       setIsUploading(false);
       dispatch({ type: "END_LOADING" });
       resetForm();
-      setDialogOpen(false); // Close the dialog
+      setDialogOpen(false);
       navigate("/");
       dispatch({
         type: "UPDATE_ALERT",
@@ -364,17 +394,29 @@ function Register() {
         },
       });
     } catch (error) {
-      console.error("File upload error:", error);
+      console.error("Registration error:", error);
+      setIsUploading(false);
       dispatch({ type: "END_LOADING" });
+
+      const errorMessage = error.message || lang.failed;
+
       dispatch({
         type: "UPDATE_ALERT",
         payload: {
           open: true,
           severity: "error",
           title: lang.error,
-          message: lang.failed,
+          message: errorMessage,
         },
       });
+
+      // Additional error handling for specific cases
+      if (error.message === lang.fileUploadFailed) {
+        setFileErrors({
+          contract: lang.fileUploadFailed,
+          id: lang.fileUploadFailed,
+        });
+      }
     }
   };
 
@@ -762,7 +804,7 @@ function Register() {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={toggleTermsDialog} color="primary">
+          <Button onClick={toggleTermsDialog} color="secondary">
             {lang.close}
           </Button>
         </DialogActions>

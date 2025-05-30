@@ -13,7 +13,7 @@ import { ShareRounded, DownloadingRounded } from "@mui/icons-material";
 import axios from "axios";
 import en from "../../src/locales/en.json";
 import ar from "../../src/locales/ar.json";
-import { firestore } from "./firebaseApp";
+import { firestore, analytics } from "./firebaseApp";
 import * as html2canvas from "html2canvas";
 import {
   getDoc,
@@ -26,12 +26,15 @@ import { RtlContext } from "./RtlContext";
 import { toBlob } from "html-to-image";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { GateButtons, useGateConfig } from "./GateButtons";
+import { logEvent } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
 
 function QRCodePanel() {
   const [qrCodeComponent, setQRCodeComponent] = useState(null);
   const { state } = useValue();
   const { isRtl } = useContext(RtlContext);
   const { dispatch } = useValue();
+  const gateConfig = useGateConfig();
 
   const navigate = useNavigate();
 
@@ -47,22 +50,22 @@ function QRCodePanel() {
   );
   const pageRef = useRef();
 
-  // const hasGeneratedQR = useRef(false); // Ref to track whether the QR code is already generated
   const [selectedGate, setSelectedGate] = useState(0); // State for selected gate (1 or 3)
   const getGateName = (gateNumber) => {
-    switch(gateNumber) {
-      case 1: return lang.gate1;
-      case 3: return lang.gate3;
-      case 4: return lang.gate4;
-      default: return lang.gate1; // Default to Gate 1
+    switch (gateNumber) {
+      case 1:
+        return gateConfig.gate_1.text[isRtl ? "ar" : "en"];
+      case 3:
+        return gateConfig.gate_3.text[isRtl ? "ar" : "en"];
+      case 4:
+        return gateConfig.gate_4.text[isRtl ? "ar" : "en"];
+      case 5:
+        return gateConfig.gate_5.text[isRtl ? "ar" : "en"];
+      default:
+        return gateConfig.gate_1.text[isRtl ? "ar" : "en"]; // Default to Gate 1
     }
   };
-  // useEffect(() => {
-  //   if (!hasGeneratedQR.current) {
-  //     GenerateQRCode(); // Call QR code generation once on component load
-  //     hasGeneratedQR.current = true; // Mark it as generated
-  //   }
-  // }, []); // This effect only runs once, right after the initial render
+
   useEffect(() => {
     if (selectedGate === 0) return;
     else {
@@ -70,13 +73,9 @@ function QRCodePanel() {
     }
   }, [selectedGate]);
   useEffect(() => {
-    // This will run whenever the language changes
     setPassMessage(lang.passMessage);
 
-    let selectedGateName = 
-    setHiddenEndDate(
-      endDate + ` | ${getGateName}`
-    );
+    let selectedGateName = setHiddenEndDate(endDate + ` | ${getGateName}`);
     setHiddenData(
       `${lang.name} : ${state.currentUser.name} | ${lang.building} : ${state.currentUser.building} | ${lang.apartment} : ${state.currentUser.flat}`
     );
@@ -85,7 +84,6 @@ function QRCodePanel() {
   async function GenerateQRCode() {
     // Prevent further POST requests
     dispatch({ type: "START_LOADING" });
-
     const token = await getSharedToken();
     if (!token) {
       dispatch({ type: "END_LOADING" });
@@ -125,11 +123,18 @@ function QRCodePanel() {
         console.error("response:", response.data);
 
         if (response.data["gatesResult"][0]["success"]) {
+
+          logEvent(analytics, "Qr_Generated", { Gate: selectedGate,
+            timestamp: Date.now() });
           if (!qrCodeComponent) {
             setQRCodeComponent(
               <QRCode size={280} fgColor="#00000" value={cardNo.toString()} />
             );
-            setEndDate(formatDate(Date.now() + 24 * 60 * 60 * 1000, false));
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setDate(now.getDate() + 1);
+
+            setEndDate(formatDate(tomorrow, false));
           }
         } else {
           dispatch({ type: "END_LOADING" });
@@ -150,9 +155,7 @@ function QRCodePanel() {
         // Set hidden data and visibility logic
 
         setPassMessage(lang.passMessage);
-        setHiddenEndDate(
-          endDate + ` | ${getGateName(selectedGate)}`
-        );
+        setHiddenEndDate(endDate + ` | ${getGateName(selectedGate)}`);
         setHiddenData(
           `${lang.name} : ${state.currentUser.name} | ${lang.building} : ${state.currentUser.building} | ${lang.apartment} : ${state.currentUser.flat}`
         );
@@ -260,10 +263,9 @@ function QRCodePanel() {
     }
   }
 
-
   const getGateMessage = (selectedGate) => {
     let gateLocation;
-    switch(selectedGate) {
+    switch (selectedGate) {
       case 1:
         gateLocation = lang.Gate1Location;
         break;
@@ -276,19 +278,18 @@ function QRCodePanel() {
       default:
         gateLocation = lang.Gate1Location; // default to Gate 1
     }
-    
+
     return `${lang.passMessage}\n${gateLocation}`;
   };
-
 
   const handleShare = async (element) => {
     const textElements = element.querySelectorAll(
       "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
     );
-  
+
     const originalColors = [];
     const originalBackground = element.style.backgroundColor;
-  
+
     // Save original colors and set text color to black
     textElements.forEach((el, index) => {
       originalColors[index] = el.style.color;
@@ -296,7 +297,7 @@ function QRCodePanel() {
     });
     element.style.backgroundColor = "white";
     element.style.fontFamily = "Tajawal, sans-serif"; // Ensure the font is inline
-  
+
     let newFile;
     try {
       // Convert the element to a Blob image using toBlob function
@@ -305,7 +306,7 @@ function QRCodePanel() {
       console.error("Error generating the blob:", error);
       return;
     }
-  
+
     // Create the share data with both image and text
     const data = {
       files: [
@@ -314,9 +315,11 @@ function QRCodePanel() {
         }),
       ],
       title: lang.darMisr,
-      text: `${lang.passMessage}\n${getGateName(selectedGate)}\n${hiddenData}\n${hiddenEndDate}`
+      text: `${lang.passMessage}\n${getGateName(
+        selectedGate
+      )}\n${hiddenData}\n${hiddenEndDate}`,
     };
-  
+
     // Share the content using the Web Share API
     try {
       if (navigator.canShare && navigator.canShare(data)) {
@@ -326,7 +329,7 @@ function QRCodePanel() {
         await navigator.share({
           title: lang.darMisr,
           text: data.text,
-          url: qrImageUrl // Share the image URL if available
+          url: qrImageUrl, // Share the image URL if available
         });
       }
     } catch (err) {
@@ -433,39 +436,7 @@ function QRCodePanel() {
                   <br />
                   <Typography variant="h5">{lang.selectGate}</Typography>
 
-                  <Button
-                    disabled={true}
-                    variant="contained"
-                    sx={{ mt: 3, mb: 1.5 }}
-                    fullWidth
-                    onClick={() => {
-                      setSelectedGate(1);
-                    }}
-                  >
-                    {lang.gate1}
-                  </Button>
-                  <Button
-                    variant="contained"
-                    sx={{ mt: 1.5, mb: 2 }}
-                    fullWidth
-                    onClick={() => {
-                      setSelectedGate(3);
-                    }}
-                  >
-                    {lang.gate3}
-                  </Button>
-
-                  <Button
-                    //  disabled={true}
-                    variant="contained"
-                    sx={{ mt: 1.5, mb: 2 }}
-                    fullWidth
-                    onClick={() => {
-                      setSelectedGate(4);
-                    }}
-                  >
-                    {lang.gate4}
-                  </Button>
+                  <GateButtons setSelectedGate={setSelectedGate} />
                 </motion.div>
               </Panel>
             </Box>

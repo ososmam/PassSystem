@@ -1,6 +1,7 @@
-import { Alert, AlertTitle, Snackbar } from '@mui/material';
-import React, { memo } from 'react';
-import { useValue } from './ContextProvider';
+import { Alert, AlertTitle, Snackbar } from "@mui/material";
+import React, { memo } from "react";
+import { useValue } from "./ContextProvider";
+import { color } from "framer-motion";
 
 const Notification = memo(() => {
   const {
@@ -9,8 +10,8 @@ const Notification = memo(() => {
   } = useValue();
 
   const handleClose = (event, reason) => {
-    if (reason === 'clickaway') return;
-    dispatch({ type: 'UPDATE_ALERT', payload: { ...alert, open: false } });
+    if (reason === "clickaway") return;
+    dispatch({ type: "UPDATE_ALERT", payload: { ...alert, open: false } });
   };
 
   return (
@@ -18,7 +19,14 @@ const Notification = memo(() => {
       open={alert?.open}
       autoHideDuration={5000}
       onClose={handleClose}
-      anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      sx={{
+        "& .MuiAlertTitle-root": {
+          color: "#f5f5f5", // Light color for title in filled alerts
+          fontWeight: "bold",
+          marginBottom: "4px",
+        },
+      }}
     >
       <Alert
         onClose={handleClose}

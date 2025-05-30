@@ -13,9 +13,9 @@ import { useNavigate } from "react-router-dom";
 import {
   doc,
   updateDoc,
-  FieldValue,
+  arrayRemove,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-
+import { signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import en from "../locales/en.json";
 import ar from "../locales/ar.json";
 import { deleteFcmTokenToServer } from "./messaging";
@@ -29,7 +29,7 @@ const Topbar = () => {
   const isLoggedIn = state.currentUser !== null;
 
   const { isRtl, toggleRtl } = useRtl();
-
+  const lang = isRtl ? ar : en;
   const userId = state.currentUser?.id; // Assumes the user's ID is stored in `state.currentUser`
   const handleHome = () => {
     navigate("/home");
@@ -37,28 +37,53 @@ const Topbar = () => {
   const handleLogout = async () => {
     try {
       if (userId !== "") {
+        // 1. Remove FCM token from server
         await deleteFcmTokenToServer(userId);
-
+  
         const userDocRef = doc(firestore, "hosts", userId);
-
-        try {
-          await updateDoc(userDocRef, { deviceId: "" });
-        } catch (error) {
-          console.error("Error clearing deviceId:", error);
+        const currentDeviceId = localStorage.getItem("deviceId");
+  
+        if (currentDeviceId) {
+          try {
+            // 2. Remove current device from user's deviceIds array
+            await updateDoc(userDocRef, {
+              deviceIds: arrayRemove(currentDeviceId)
+            });
+          } catch (error) {
+            console.error("Error removing device from list:", error);
+            
+            // Fallback: Try the old method if deviceIds array doesn't exist
+            try {
+              await updateDoc(userDocRef, { deviceId: "" });
+            } catch (fallbackError) {
+              console.error("Fallback error clearing deviceId:", fallbackError);
+            }
+          }
         }
       }
+  
+      // 3. Sign out from Firebase
       if (firebaseAuth.currentUser) {
-        // Sign out from Firebase
-        await firebaseAuth.signOut();
+        await signOut(firebaseAuth);
       }
-      // Clear user data from local storage and context state
+  
+      // 4. Clear local data
       localStorage.removeItem("deviceId");
       dispatch({ type: "UPDATE_USER", payload: null });
-
-      // Navigate back to login page
+  
+      // 5. Navigate to login
       navigate("/");
     } catch (error) {
-      console.error("Error signing out:", error);
+      console.error("Error during logout:", error);
+      dispatch({
+        type: "UPDATE_ALERT",
+        payload: {
+          open: true,
+          severity: "error",
+          title: lang.error,
+          message: lang.logoutError || "Error during logout",
+        },
+      });
     }
   };
 

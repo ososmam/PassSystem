@@ -15,8 +15,7 @@ const FloatingButton = () => {
   const whatsappColor = theme.palette.mode === "dark" ? "#128C7E" : "#25D366";
   const facebookColor = theme.palette.mode === "dark" ? "#0061A8" : "#1877F2";
   const facebookGroupLink = "https://www.facebook.com/groups/darmasrandalus2";
-  const whatsappChatLink =
-    "https://wa.me/+201044189211";
+  const whatsappChatLink = "https://wa.me/+201044189211";
 
   return (
     <Box
@@ -28,14 +27,15 @@ const FloatingButton = () => {
         flexDirection: "column",
         alignItems: "center",
         gap: 1,
-
         zIndex: 10,
       }}
     >
       <AnimatePresence>
-        {/* {open && (
-          <> */}
+        {/* Conditionally rendered buttons with unique keys */}
+        {open && (
+          <>
             <motion.div
+              key="whatsapp-button"  // Unique key
               initial={{ opacity: 0, scale: 0.8, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8, y: 10 }}
@@ -59,6 +59,7 @@ const FloatingButton = () => {
             </motion.div>
 
             <motion.div
+              key="facebook-button"  // Unique key
               initial={{ opacity: 0, scale: 0.8, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8, y: 10 }}
@@ -71,7 +72,7 @@ const FloatingButton = () => {
                   sx={{
                     backgroundColor: facebookColor,
                     "&:hover": {
-                      backgroundColor: "#155E9C", // Darker Facebook color on hover
+                      backgroundColor: "#155E9C",
                     },
                   }}
                 >
@@ -79,11 +80,11 @@ const FloatingButton = () => {
                 </Fab>
               </Tooltip>
             </motion.div>
-          {/* </>
-        )} */}
+          </>
+        )}
       </AnimatePresence>
 
-      {/* <Fab
+      <Fab
         color="primary"
         onClick={() => setOpen(!open)}
         aria-label={lang.reachUs}
@@ -93,7 +94,7 @@ const FloatingButton = () => {
         }}
       >
         {open ? <Close /> : <ChatBubble />}
-      </Fab> */}
+      </Fab>
     </Box>
   );
 };

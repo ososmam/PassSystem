@@ -2,6 +2,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebas
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { getMessaging } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js";
+import {getRemoteConfig} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-remote-config.js";
+import {getAnalytics} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
 const firebaseConfig = {
   apiKey: "AIzaSyDKjXDo_40lB_3pLlIZF6HksxIKi9rktiw",
   authDomain: "dar-misr-andalus-2.firebaseapp.com",
@@ -16,5 +18,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const firebaseAuth = getAuth(firebaseApp);
 const firestore = getFirestore(firebaseApp);
 const messaging = getMessaging(firebaseApp);
+const remoteConfig = getRemoteConfig(firebaseApp);
+const analytics = getAnalytics(firebaseApp);
 
-export { firebaseApp, firebaseAuth, firestore,messaging };
+export { firebaseApp, firebaseAuth, firestore,messaging ,remoteConfig,analytics };

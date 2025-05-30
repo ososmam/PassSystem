@@ -1,227 +1,171 @@
 import { createContext, useState, useMemo } from "react";
 import { createTheme } from "@mui/material";
 
-//color design tokens
-export const tokens = (mode, isRtl) => ({
-  ...(mode === "dark"
-    ? {
-        grey: {
-          100: "#e0e0e0",
-          200: "#c2c2c2",
-          300: "#a3a3a3",
-          400: "#858585",
-          500: "#666666",
-          600: "#525252",
-          700: "#3d3d3d",
-          800: "#292929",
-          900: "#141414",
-        },
-        primary: {
-          100: "#d0d1d5",
-          200: "#a1a4ab",
-          300: "#727681",
-          400: "#1F2A40",
-          500: "#141b2d",
-          600: "#101624",
-          700: "#0c101b",
-          800: "#080b12",
-          900: "#040509",
-        },
-        greenAccent: {
-          100: "#dbf5ee",
-          200: "#b7ebde",
-          300: "#94e2cd",
-          400: "#70d8bd",
-          500: "#4cceac",
-          600: "#3da58a",
-          700: "#2e7c67",
-          800: "#1e5245",
-          900: "#0f2922",
-        },
-        redAccent: {
-          100: "#f8dcdb",
-          200: "#f1b9b7",
-          300: "#e99592",
-          400: "#e2726e",
-          500: "#db4f4a",
-          600: "#af3f3b",
-          700: "#832f2c",
-          800: "#58201e",
-          900: "#2c100f",
-        },
-        blueAccent: {
-          100: "#e1e2fe",
-          200: "#c3c6fd",
-          300: "#a4a9fc",
-          400: "#868dfb",
-          500: "#6870fa",
-          600: "#535ac8",
-          700: "#3e4396",
-          800: "#2a2d64",
-          900: "#151632",
-        },
-      }
-    : {
-        grey: {
-          100: "#141414",
-          200: "#292929",
-          300: "#3d3d3d",
-          400: "#525252",
-          500: "#666666",
-          600: "#858585",
-          700: "#a3a3a3",
-          800: "#c2c2c2",
-          900: "#e0e0e0",
-        },
-        primary: {
-          100: "#040509",
-          200: "#080b12",
-          300: "#0c101b",
-          400: "#f2f0f0", // manually changed
-          500: "#141b2d",
-          600: "#1F2A40",
-          700: "#727681",
-          800: "#a1a4ab",
-          900: "#d0d1d5",
-        },
-        greenAccent: {
-          100: "#0f2922",
-          200: "#1e5245",
-          300: "#2e7c67",
-          400: "#3da58a",
-          500: "#4cceac",
-          600: "#70d8bd",
-          700: "#94e2cd",
-          800: "#b7ebde",
-          900: "#dbf5ee",
-        },
-        redAccent: {
-          100: "#2c100f",
-          200: "#58201e",
-          300: "#832f2c",
-          400: "#af3f3b",
-          500: "#db4f4a",
-          600: "#e2726e",
-          700: "#e99592",
-          800: "#f1b9b7",
-          900: "#f8dcdb",
-        },
-        blueAccent: {
-          100: "#151632",
-          200: "#2a2d64",
-          300: "#3e4396",
-          400: "#535ac8",
-          500: "#6870fa",
-          600: "#868dfb",
-          700: "#a4a9fc",
-          800: "#c3c6fd",
-          900: "#e1e2fe",
-        },
-      }),
+// Color design tokens with better organization
+export const tokens = (mode) => ({
+  common: {
+    white: "#ffffff",
+    black: "#000000"
+  },
+  grey: {
+    50: mode === "dark" ? "#fafafa" : "#212121",  // New - extra contrast level
+    100: mode === "dark" ? "#f5f5f5" : "#424242", // Brighter in light mode
+    200: mode === "dark" ? "#eeeeee" : "#616161",
+    300: mode === "dark" ? "#e0e0e0" : "#757575",
+    400: mode === "dark" ? "#bdbdbd" : "#9e9e9e",
+    500: "#9e9e9e", // Neutral midpoint
+    600: mode === "dark" ? "#757575" : "#bdbdbd",
+    700: mode === "dark" ? "#616161" : "#e0e0e0",
+    800: mode === "dark" ? "#424242" : "#eeeeee",
+    900: mode === "dark" ? "#212121" : "#f5f5f5"
+  },
+  primary: {
+    100: mode === "dark" ? "#d0d1d5" : "#040509",
+    200: mode === "dark" ? "#a1a4ab" : "#080b12",
+    300: mode === "dark" ? "#727681" : "#0c101b",
+    400: mode === "dark" ? "#1F2A40" : "#434956", // Brighter in light mode
+    500: "#141b2d",
+    600: mode === "dark" ? "#101624" : "#1F2A40",
+    700: mode === "dark" ? "#0c101b" : "#727681",
+    800: mode === "dark" ? "#080b12" : "#a1a4ab",
+    900: mode === "dark" ? "#040509" : "#d0d1d5"
+  },
+  greenAccent: {
+    100: mode === "dark" ? "#dbf5ee" : "#0f2922",
+    200: mode === "dark" ? "#b7ebde" : "#1e5245",
+    300: mode === "dark" ? "#94e2cd" : "#2e7c67",
+    400: mode === "dark" ? "#70d8bd" : "#3da58a",
+    500: "#4cceac", // Same in both modes
+    600: mode === "dark" ? "#3da58a" : "#70d8bd",
+    700: mode === "dark" ? "#2e7c67" : "#94e2cd",
+    800: mode === "dark" ? "#1e5245" : "#b7ebde",
+    900: mode === "dark" ? "#0f2922" : "#dbf5ee"
+  },
+  redAccent: {
+    100: mode === "dark" ? "#f8dcdb" : "#2c100f",
+    200: mode === "dark" ? "#f1b9b7" : "#58201e",
+    300: mode === "dark" ? "#e99592" : "#832f2c",
+    400: mode === "dark" ? "#e2726e" : "#af3f3b",
+    500: "#db4f4a", // Same in both modes
+    600: mode === "dark" ? "#af3f3b" : "#e2726e",
+    700: mode === "dark" ? "#832f2c" : "#e99592",
+    800: mode === "dark" ? "#58201e" : "#f1b9b7",
+    900: mode === "dark" ? "#2c100f" : "#f8dcdb"
+  },
+  blueAccent: {
+    100: mode === "dark" ? "#e1e2fe" : "#151632",
+    200: mode === "dark" ? "#c3c6fd" : "#2a2d64",
+    300: mode === "dark" ? "#a4a9fc" : "#3e4396",
+    400: mode === "dark" ? "#868dfb" : "#535ac8",
+    500: "#6870fa", // Same in both modes
+    600: mode === "dark" ? "#535ac8" : "#868dfb",
+    700: mode === "dark" ? "#3e4396" : "#a4a9fc",
+    800: mode === "dark" ? "#2a2d64" : "#c3c6fd",
+    900: mode === "dark" ? "#151632" : "#e1e2fe"
+  }
 });
 
+// Enhanced theme settings with RTL support
 export const themeSettings = (mode, isRtl) => {
   const colors = tokens(mode);
+  const fontFamily = isRtl ? "'Tajawal', sans-serif" : "'Roboto', 'Tajawal', sans-serif";
 
   return {
+    direction: isRtl ? "rtl" : "ltr",
     palette: {
       mode: mode,
-      ...(mode === "dark"
-        ? {
-            primary: {
-              main: colors.greenAccent[800],
-            },
-            secondary: {
-              main: colors.greenAccent[500],
-            },
-            neutral: {
-              dark: colors.grey[700],
-              main: colors.grey[500],
-              light: colors.grey[100],
-            },
-            background: {
-              default: colors.primary[600],
-            },
-          }
-        : {
-            primary: {
-              main: colors.greenAccent[400],
-            },
-            secondary: {
-              main: colors.greenAccent[500],
-            },
-            neutral: {
-              dark: colors.grey[700],
-              main: colors.grey[500],
-              light: colors.grey[100],
-            },
-            background: {
-              default: "#fcfcfc",
-            },
-          }),
+      common: colors.common,
+      grey: colors.grey,
+      primary: {
+        main: mode === "dark" ? colors.greenAccent[800] : colors.greenAccent[400],
+        contrastText: colors.common.white
+      },
+      text: {
+        primary:  colors.grey[100] ,  // High contrast
+        secondary:  colors.grey[300] , // Slightly lighter
+        disabled:  colors.grey[600]   // Clear disabled state
+      },
+      background: {
+        default: mode === "dark" ? colors.primary[600] : "#fcfcfc",
+        paper: mode === "dark" ? colors.primary[500] : colors.common.white
+      },
+      secondary: {
+        main: mode === "dark" ? colors.greenAccent[400] : colors.greenAccent[300],
+        contrastText: colors.common.white
+      },
+      error: {
+        main: colors.redAccent[500],
+        contrastText: colors.common.white
+      },
+      success: {
+        main: colors.greenAccent[500],
+        contrastText: colors.common.white
+      },
+      info: {
+        main: colors.blueAccent[500],
+        contrastText: colors.common.white
+      }
     },
     typography: {
-      fontFamily: ["Tajawal", "sans-serif"].join(","),
+      fontFamily: fontFamily,
       fontSize: 15,
-      h1: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 40,
+      allVariants: {
+        color:colors.grey[100] // Base text color
       },
-      h2: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 32,
+      h1: { fontSize: 40, fontWeight: 700,},
+      h2: { fontSize: 32, fontWeight: 600,},
+      h3: { fontSize: 24, fontWeight: 500 },
+      h4: { fontSize: 22, fontWeight: 500 },
+      h5: { fontSize: 18, fontWeight: 500 },
+      h6: { fontSize: 16, fontWeight: 500 },
+      subtitle1: { fontSize: 14 },
+      subtitle2: { fontSize: 12 },
+      body1: { fontSize: 15 },
+      body2: { fontSize: 13 },
+      button: { fontWeight: 500 },
+      caption: { fontSize: 10 }
+    },
+    components: {
+      MuiTypography: {
+        defaultProps: {
+          variantMapping: {
+            h1: 'h1',
+            h2: 'h2',
+            body1: 'p',
+          }
+        },
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            borderRadius: '8px',
+            transition: 'all 0.3s ease',
+          },
+        },
+        
       },
-      h3: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 24,
-      },
-      h4: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 22,
-      },
-      h5: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 18,
-      },
-      h6: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 16,
-      },
-      v: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 10,
-      },
-      sub: {
-        fontFamily: ["Tajawal", "sans-serif"].join(","),
-        fontSize: 14,
+      MuiButtonBase: {
+        defaultProps: {
+          disableRipple: true, // Optional: removes ripple effect for cleaner look
+        },
       },
     },
   };
-
-  
 };
 
-
-
-// context for color mode
+// Enhanced Color Mode Context
 export const ColorModeContext = createContext({
   toggleColorMode: () => {},
+  currentMode: "light"
 });
-
 
 export const useMode = (isRtl) => {
   const [mode, setMode] = useState("light");
 
-  // Function to toggle between light and dark mode
-  const colorMode = useMemo(
-    () => ({
-      toggleColorMode: () =>
-        setMode((prev) => (prev === "light" ? "dark" : "light")),
-    }),
-    []
-  );
+  const colorMode = useMemo(() => ({
+    toggleColorMode: () => setMode((prev) => (prev === "light" ? "dark" : "light")),
+    currentMode: mode
+  }), [mode]);
 
-  // Generate theme based on mode and isRtl
   const theme = useMemo(
     () => createTheme(themeSettings(mode, isRtl)),
     [mode, isRtl]
@@ -229,4 +173,3 @@ export const useMode = (isRtl) => {
 
   return [theme, colorMode];
 };
-

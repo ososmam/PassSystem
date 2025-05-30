@@ -7,6 +7,8 @@ import {
   where,
   getDocs,
   updateDoc,
+  arrayUnion,
+  getDoc,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import {
   signInWithEmailAndPassword,
@@ -15,11 +17,12 @@ import {
   setPersistence,
   browserLocalPersistence,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import {
+  fetchAndActivate,
+  getValue,
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-remote-config.js";
 
-
-
-
-import { firestore, firebaseAuth } from "./firebaseApp";
+import { firestore, firebaseAuth, remoteConfig } from "./firebaseApp";
 import { v4 as uuidv4 } from "uuid";
 import en from "../locales/en.json";
 import ar from "../locales/ar.json";
@@ -32,13 +35,14 @@ import {
   Typography,
   Paper,
   styled,
+  CircularProgress,
 } from "@mui/material";
 
 import { RtlContext } from "./RtlContext";
 import { useValue } from "./ContextProvider";
 import { useNavigate } from "react-router-dom";
-import { requestNotificationPermission} from "./messaging";
-import { motion } from "framer-motion"; // Import Framer Motion
+import { requestNotificationPermission } from "./messaging";
+import { motion } from "framer-motion";
 
 const Panel = styled(Paper)(({ theme }) => ({
   backgroundColor: theme.palette.mode === "dark" ? "#1A2027" : "#FCFCFC",
@@ -53,30 +57,100 @@ setPersistence(firebaseAuth, browserLocalPersistence);
 
 function Login() {
   const navigate = useNavigate();
-  // const isNonMobile = useMediaQuery("(min-width:600px)");
-  // const theme = useTheme();
   const { isRtl } = useContext(RtlContext);
-  const { state,dispatch } = useValue();
+  const { state, dispatch } = useValue();
   const lang = isRtl ? ar : en;
-  const [isLoading, setIsLoading] = useState(true); 
-
+  const [isLoading, setIsLoading] = useState(true);
   const currentDeviceId = localStorage.getItem("deviceId") || uuidv4();
-  localStorage.setItem("deviceId", currentDeviceId); 
-  const toggleRegister = () => {
+  localStorage.setItem("deviceId", currentDeviceId);
 
-    navigate("/register"); 
+  const toggleRegister = () => {
+    navigate("/register");
   };
+
+  const checkDeviceLimit = async (userId, currentDeviceId) => {
+    try {
+      // Try to use Remote Config first
+      await fetchAndActivate(remoteConfig);
+      const maxDevices =
+        getValue(remoteConfig, "max_allowed_devices").asNumber() || 2;
+
+      const userRef = doc(firestore, "hosts", userId);
+      const userDoc = await getDoc(userRef);
+
+      if (!userDoc.exists()) {
+        throw new Error("User document not found");
+      }
+
+      const userData = userDoc.data();
+
+      // If no deviceIds array exists, create one with current device
+      if (!userData.deviceIds) {
+        await updateDoc(userRef, {
+          deviceIds: [currentDeviceId],
+        });
+        return true;
+      }
+
+      // Device already registered
+      if (userData.deviceIds.includes(currentDeviceId)) {
+        return true;
+      }
+
+      // Check device limit
+      if (userData.deviceIds.length >= maxDevices) {
+        return false;
+      }
+
+      // Add new device
+      await updateDoc(userRef, {
+        deviceIds: arrayUnion(currentDeviceId),
+      });
+      return true;
+    } catch (error) {
+      console.error("Remote Config failed, using default limit:", error);
+      // Fallback to default limit if Remote Config fails
+      return checkDeviceLimitWithDefault(userId, currentDeviceId);
+    }
+  };
+
+  const checkDeviceLimitWithDefault = async (
+    userId,
+    currentDeviceId,
+    defaultValue = 3
+  ) => {
+    const userRef = doc(firestore, "hosts", userId);
+    const userDoc = await getDoc(userRef);
+    const userData = userDoc.data();
+
+    // Same logic as above but with default value
+    if (!userData.deviceIds) {
+      await updateDoc(userRef, { deviceIds: [currentDeviceId] });
+      return true;
+    }
+
+    if (userData.deviceIds.includes(currentDeviceId)) return true;
+    if (userData.deviceIds.length >= defaultValue) return false;
+
+    await updateDoc(userRef, { deviceIds: arrayUnion(currentDeviceId) });
+    return true;
+  };
+
   const verifyDeviceOnLoad = async () => {
     dispatch({ type: "START_LOADING" });
     const user = firebaseAuth.currentUser;
 
     if (user) {
       const email = user.email;
-      const phoneNumber = email.split("@")[0]; 
+      const phoneNumber = email.split("@")[0];
 
       try {
         const userDocRef = collection(firestore, "hosts");
-        const q = query(userDocRef, where("phone", "==", phoneNumber),where("verified", "==", true)); 
+        const q = query(
+          userDocRef,
+          where("phone", "==", phoneNumber),
+          where("verified", "==", true)
+        );
         const querySnapshot = await getDocs(q);
 
         if (querySnapshot.empty) {
@@ -86,31 +160,44 @@ function Login() {
         }
 
         const userData = querySnapshot.docs[0].data();
-        const storedDeviceId = userData.deviceId;
         const docId = querySnapshot.docs[0].id;
-userData.id = docId;
-        if (storedDeviceId && storedDeviceId !== currentDeviceId) {
+        userData.id = docId;
+
+        if (userData.endDate && userData.endDate.toDate() < new Date()) {
           dispatch({
             type: "UPDATE_ALERT",
             payload: {
               open: true,
               severity: "error",
               title: lang.error,
-              message: lang.restrictedDevice,
+              message: lang.rentalExpired || "Your rental period has ended",
             },
           });
-
           await signOut(firebaseAuth);
           dispatch({ type: "UPDATE_USER", payload: null });
-          dispatch({ type: "END_LOADING" });
-          setIsLoading(false);
+          return;
+        }
+
+        const isDeviceAllowed = await checkDeviceLimit(docId, currentDeviceId);
+
+        if (!isDeviceAllowed) {
+          dispatch({
+            type: "UPDATE_ALERT",
+            payload: {
+              open: true,
+              severity: "error",
+              title: lang.error,
+              message:
+                lang.deviceLimitReached ||
+                "Device limit reached. Please log out from another device.",
+            },
+          });
+          await signOut(firebaseAuth);
+          dispatch({ type: "UPDATE_USER", payload: null });
         } else {
           dispatch({ type: "UPDATE_USER", payload: userData });
           navigate("/home");
-          
           requestNotificationPermission(userData.id);
-          dispatch({ type: "END_LOADING" });
-          setIsLoading(false);
         }
       } catch (error) {
         dispatch({
@@ -122,6 +209,7 @@ userData.id = docId;
             message: "Could not verify device.",
           },
         });
+      } finally {
         dispatch({ type: "END_LOADING" });
         setIsLoading(false);
       }
@@ -131,17 +219,16 @@ userData.id = docId;
     }
   };
 
-  
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       if (user) {
-        verifyDeviceOnLoad(); 
+        verifyDeviceOnLoad();
       } else {
-        setIsLoading(false); 
+        setIsLoading(false);
       }
     });
-    return () => unsubscribe(); 
-  },[]);
+    return () => unsubscribe();
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -153,72 +240,111 @@ userData.id = docId;
     dispatch({ type: "START_LOADING" });
     const phone = data.get("phone").substring(1);
     const password = data.get("password");
-    const currentDeviceId = localStorage.getItem("deviceId") || uuidv4();
 
-    signInWithEmailAndPassword(firebaseAuth, phone + "@dm2.test", password)
-      .then(() => {
-        dispatch({ type: "END_LOADING" });
-        const userDocRef = collection(firestore, "hosts");
-        const q = query(
-          userDocRef,
-          where("phone", "==", phone),
-          where("verified", "==", true)
+    try {
+      // Attempt Firebase authentication
+      await signInWithEmailAndPassword(
+        firebaseAuth,
+        phone + "@dm2.test",
+        password
+      );
+
+      // Query user document
+      const userDocRef = collection(firestore, "hosts");
+      const q = query(
+        userDocRef,
+        where("phone", "==", phone),
+        where("verified", "==", true)
+      );
+      const q2 = query(
+        userDocRef,
+        where("secondPhone", "==", phone),
+        where("verified", "==", true)
+      );
+
+      const [querySnapshot, querySnapshot2] = await Promise.all([
+        getDocs(q),
+        getDocs(q2),
+      ]);
+      // Check if user exists and is verified
+      if (querySnapshot.empty && querySnapshot2.empty) {
+        throw new Error(
+          lang.notVerified ||
+            "Your account is not verified yet. Please wait for approval."
         );
+      }
 
-        getDocs(q).then((querySnapshot) => {
-          if (querySnapshot.empty) {
-            dispatch({
-              type: "UPDATE_ALERT",
-              payload: {
-                open: true,
-                severity: "error",
-                title: lang.error,
-                message: lang.notVerified,
-              },
-            });
-            return;
-          } else {
-            const data = querySnapshot.docs[0].data();
-            data.id = querySnapshot.docs[0].id;
+      const userDoc = querySnapshot.docs[0] || querySnapshot2.docs[0];
+      const userData = { ...userDoc.data(), id: userDoc.id };
+      if (userData.endDate && userData.endDate.toDate() < new Date()) {
+        throw new Error(
+          lang.rentalExpired ||
+            "Your rental period has ended. Please contact support."
+        );
+      }
+      // Check device limit
+      const isDeviceAllowed = await checkDeviceLimit(
+        userData.id,
+        currentDeviceId
+      );
 
-            const storedDeviceId = data.deviceId;
-            if (!storedDeviceId) {
-              updateDoc(doc(firestore, "hosts", data.id), {
-                deviceId: currentDeviceId,
-              }).then(() => {
-                dispatch({ type: "UPDATE_USER", payload: data });
+      if (!isDeviceAllowed) {
+        throw new Error(
+          lang.deviceLimitReached ||
+            `You've reached the maximum allowed devices (${remoteConfig.defaultConfig.max_allowed_devices}). 
+          Please log out from another device first.`
+        );
+      }
 
-                navigate("/home");
-              });
-            } else if (storedDeviceId !== currentDeviceId) {
-              dispatch({ type: "END_LOADING" });
-              dispatch({
-                type: "UPDATE_ALERT",
-                payload: {
-                  open: true,
-                  severity: "error",
-                  title: lang.error,
-                  message: lang.restrictedDevice,
-                },
-              });
-            }
-          }
-        });
-      })
-      .catch((error) => {
-        dispatch({ type: "END_LOADING" });
-        dispatch({
-          type: "UPDATE_ALERT",
-          payload: {
-            open: true,
-            severity: "error",
-            title: lang.error,
-            message: lang.invalid,
-          },
-        });
+      // Success - update user state and navigate
+      dispatch({ type: "UPDATE_USER", payload: userData });
+      await requestNotificationPermission(userData.id);
+      navigate("/home");
+    } catch (error) {
+      let errorMessage = lang.invalid;
+
+      // Handle specific error cases
+      switch (error.code) {
+        case "auth/invalid-email":
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+          errorMessage =
+            lang.invalidCredentials || "Invalid phone number or password";
+          break;
+        case "auth/too-many-requests":
+          errorMessage =
+            lang.tooManyAttempts ||
+            "Too many attempts. Please try again later.";
+          break;
+        default:
+          // Use the error message we threw earlier or default message
+          errorMessage = error.message || lang.invalid;
+      }
+
+      dispatch({
+        type: "UPDATE_ALERT",
+        payload: {
+          open: true,
+          severity: "error",
+          title: lang.error,
+          message: errorMessage,
+          duration: 6000, // Show for 6 seconds
+        },
       });
-  }
 
+      // Clean up by signing out if authentication succeeded but other checks failed
+      if (firebaseAuth.currentUser) {
+        try {
+          await signOut(firebaseAuth);
+        } catch (signOutError) {
+          console.error("Error during sign out:", signOutError);
+        }
+      }
+    } finally {
+      dispatch({ type: "END_LOADING" });
+    }
+  }
 
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -227,7 +353,11 @@ userData.id = docId;
 
   const logoVariants = {
     hidden: { scale: 0.8, opacity: 0 },
-    visible: { scale: 1, opacity: 1, transition: { duration: 0.5, delay: 0.2 } },
+    visible: {
+      scale: 1,
+      opacity: 1,
+      transition: { duration: 0.5, delay: 0.2 },
+    },
   };
 
   const formVariants = {
@@ -239,8 +369,6 @@ userData.id = docId;
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, delay: 0.6 } },
   };
-
-
 
   return (
     <Container component="main" maxWidth="xs">
@@ -317,7 +445,11 @@ userData.id = docId;
                     type="password"
                     id="password"
                   />
-                  <motion.div variants={buttonVariants} initial="hidden" animate="visible">
+                  <motion.div
+                    variants={buttonVariants}
+                    initial="hidden"
+                    animate="visible"
+                  >
                     <Button
                       type="submit"
                       id="loginButton"
@@ -329,11 +461,16 @@ userData.id = docId;
                     </Button>
                   </motion.div>
 
-                  <motion.div variants={buttonVariants} initial="hidden" animate="visible">
+                  <motion.div
+                    variants={buttonVariants}
+                    initial="hidden"
+                    animate="visible"
+                  >
                     <Button
                       onClick={toggleRegister}
                       fullWidth
-                      variant="contained"
+                      variant="outlined"
+                      color="secondary"
                       sx={{ mt: 3, mb: 2 }}
                     >
                       {isRtl ? ar.switchToRegister : en.switchToRegister}

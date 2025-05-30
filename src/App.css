@@ -1,7 +1,9 @@
+/* Base styles that apply to both LTR and RTL */
 .App {
   text-align: center;
-  font-family: 'Tajawal', sans-serif;
-  direction: rtl; 
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .App-logo {
@@ -37,4 +39,52 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* RTL-specific styles */
+[dir="rtl"] .App {
+  font-family: 'Tajawal', sans-serif;
+}
+
+/* LTR-specific styles */
+[dir="ltr"] .App {
+  font-family: 'Roboto', sans-serif;
+}
+
+/* Direction-aware text alignment */
+[dir="rtl"] .text-start {
+  text-align: right;
+}
+
+[dir="ltr"] .text-start {
+  text-align: left;
+}
+
+/* Additional RTL layout adjustments */
+[dir="rtl"] {
+  /* Add any RTL-specific layout fixes here */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .App-header {
+    padding: 2rem;
+  }
+  
+  [dir="rtl"] .App-header {
+    /* Specific RTL mobile adjustments */
+  }
+}
+
+/* Form elements RTL support */
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] select {
+  text-align: right;
+}
+
+[dir="ltr"] input,
+[dir="ltr"] textarea,
+[dir="ltr"] select {
+  text-align: left;
 }

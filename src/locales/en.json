@@ -43,7 +43,7 @@
   "wrongBadge": "Invalid badge number.",
   "badgeHint": "If the badge number starts with 00 ignore them and start typing from the next digits.",
   "gate1": "Gate 1 under maintenance",
-  "gate3": "Gate 3",
+  "gate3": "Gate 3 under maintenance",
   "gate4": "Gate 4",
   "selectGate": "Please select a gate to generate the pass.",
   "fileSizeError": "File size should not exceed {{size}} MB",
@@ -81,5 +81,16 @@
   "sameFileError": "You cannot upload the same file for both documents",
   "idHint": "Official ID document (national ID/passport)",
   "contractHint": "Document proving your relationship to the unit (lease/ownership/power of attorney)",
-  "uploadInstructions": "Please upload one of the following documents according to your status:\n- If you are a tenant: Official rental contract clearly showing (unit details, contract end date, and signatures of both parties)\n- If you are an owner: Official handover document or ownership contract\n- If you are a representative: Certified power of attorney with the owner's ID document\n\nImportant notes:\n1. The name in the attached document must match the name registered in the application\n2. Documents must be clear and complete\n3. Applications with unclear or incomplete documents will not be accepted"
+  "uploadInstructions": "Please upload one of the following documents according to your status:\n- If you are a tenant: Official rental contract clearly showing (unit details, contract end date, and signatures of both parties)\n- If you are an owner: Official handover document or ownership contract\n- If you are a representative: Certified power of attorney with the owner's ID document\n\nImportant notes:\n1. The name in the attached document must match the name registered in the application\n2. Documents must be clear and complete\n3. Applications with unclear or incomplete documents will not be accepted",
+  "fileRequired": "This file is required",
+  "fileUploadFailed": "File upload failed. Please try again.",
+  "userAlreadyExists": "User already exists with this phone number.",
+  "weakPassword": "Password is too weak (minimum 6 characters).",
+  "rentEndDateRequired": "Rental end date is required.",
+  "deviceLimitReached": "You've reached the maximum number of allowed devices. Please log out from another device first.",
+  "logoutError": "Error occurred during logout",
+  "invalidCredentials": "Invalid phone number or password",
+  "tooManyAttempts": "Too many attempts. Please try again later.",
+  "maxUsersPerUnit": "You cannot register more than two accounts for this unit.",
+  "rentalExpired": "Your rental period has ended. Please contact support."
 }
