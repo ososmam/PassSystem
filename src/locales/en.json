@@ -92,5 +92,9 @@
   "invalidCredentials": "Invalid phone number or password",
   "tooManyAttempts": "Too many attempts. Please try again later.",
   "maxUsersPerUnit": "You cannot register more than two accounts for this unit.",
-  "rentalExpired": "Your rental period has ended. Please contact support."
+  "rentalExpired": "Your rental period has ended. Please contact support.",
+  "passes": "Passes",
+  "news": "Announcements",
+  "noNews": "No announcements at the moment",
+  "comma":","
 }

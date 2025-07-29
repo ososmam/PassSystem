@@ -18,7 +18,7 @@ import * as html2canvas from "html2canvas";
 import {
   getDoc,
   doc,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+} from "firebase/firestore";
 
 import { useValue } from "./ContextProvider";
 import { RtlContext } from "./RtlContext";
@@ -27,7 +27,7 @@ import { toBlob } from "html-to-image";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { GateButtons, useGateConfig } from "./GateButtons";
-import { logEvent } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
+import { logEvent } from "firebase/analytics";
 
 function QRCodePanel() {
   const [qrCodeComponent, setQRCodeComponent] = useState(null);
@@ -40,8 +40,8 @@ function QRCodePanel() {
 
   const [passMessage, setPassMessage] = useState("");
   const [hiddenEndDate, setHiddenEndDate] = useState("");
+  const [apiVersion, setApiVersion] = useState("");
   const [hiddenData, setHiddenData] = useState("");
-
   const [qrImageUrl, setQrImageUrl] = useState("");
 
   const lang = isRtl ? ar : en;
@@ -76,6 +76,7 @@ function QRCodePanel() {
     setPassMessage(lang.passMessage);
 
     let selectedGateName = setHiddenEndDate(endDate + ` | ${getGateName}`);
+    setHiddenEndDate(endDate + ` | ${getGateName}`);
     setHiddenData(
       `${lang.name} : ${state.currentUser.name} | ${lang.building} : ${state.currentUser.building} | ${lang.apartment} : ${state.currentUser.flat}`
     );
@@ -84,8 +85,8 @@ function QRCodePanel() {
   async function GenerateQRCode() {
     // Prevent further POST requests
     dispatch({ type: "START_LOADING" });
-    const token = await getSharedToken();
-    if (!token) {
+    const result = await getSharedToken();
+    if (!result) {
       dispatch({ type: "END_LOADING" });
       dispatch({
         type: "UPDATE_ALERT",
@@ -98,7 +99,7 @@ function QRCodePanel() {
       });
       return;
     }
-
+    const { token, version } = result;
     const json = JSON.stringify({
       hostId: state.currentUser.id,
       gateId: selectedGate,
@@ -114,6 +115,7 @@ function QRCodePanel() {
             "Content-Type": "application/json",
             "Accept-Language": isRtl ? "ar" : "en",
             Authorization: "Bearer " + token,
+            "X-API-Version": version,
           },
         }
       );
@@ -214,11 +216,32 @@ function QRCodePanel() {
     setQrImageUrl(image); // Store the generated image URL
   }
   async function getSharedToken() {
-    const tokenDoc = await getDoc(doc(firestore, "common", "sharedToken"));
-    if (tokenDoc.exists()) {
-      return tokenDoc.data().token;
-    } else {
-      console.error("No shared token found.");
+    try {
+      const [tokenDoc, apiVersionDoc] = await Promise.all([
+        getDoc(doc(firestore, "common", "sharedToken")),
+        getDoc(doc(firestore, "api_config", "version_settings"))
+      ]);
+  
+      if (!tokenDoc.exists()) {
+        console.error("No shared token found.");
+        return null;
+      }
+  
+      let requiredVersion = "1.0"; // default fallback
+      if (apiVersionDoc.exists()) {
+        requiredVersion = apiVersionDoc.data().required_version;
+        console.log("Required API Version:", requiredVersion);
+      } else {
+        console.warn("No API version config found, using default");
+      }
+  
+      return {
+        token: tokenDoc.data().token,
+        version: requiredVersion
+      };
+  
+    } catch (error) {
+      console.error("Error fetching config:", error);
       return null;
     }
   }
@@ -408,6 +431,7 @@ function QRCodePanel() {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
+                m:1.5
               }}
               component={motion.div} // Animate the container
               variants={containerVariants}
@@ -421,7 +445,7 @@ function QRCodePanel() {
               >
                 <motion.img
                   src={require("../images/logo192.png")}
-                  width={100}
+                  width={70}
                   height={"auto"}
                   alt=""
                   variants={logoVariants} // Animate the logo

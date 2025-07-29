@@ -52,7 +52,7 @@ export const tokens = (mode) => ({
     800: mode === "dark" ? "#58201e" : "#f1b9b7",
     900: mode === "dark" ? "#2c100f" : "#f8dcdb"
   },
-  blueAccent: {
+  purpleAccent: {
     100: mode === "dark" ? "#e1e2fe" : "#151632",
     200: mode === "dark" ? "#c3c6fd" : "#2a2d64",
     300: mode === "dark" ? "#a4a9fc" : "#3e4396",
@@ -62,7 +62,19 @@ export const tokens = (mode) => ({
     700: mode === "dark" ? "#3e4396" : "#a4a9fc",
     800: mode === "dark" ? "#2a2d64" : "#c3c6fd",
     900: mode === "dark" ? "#151632" : "#e1e2fe"
+  },
+  blueAccent: {
+    100: mode === "dark" ? "#d0e7ff" : "#0d1b2a",
+    200: mode === "dark" ? "#a1cfff" : "#1b3a4b",
+    300: mode === "dark" ? "#72b8ff" : "#245e6f",
+    400: mode === "dark" ? "#327e9a" :  "#439fff",
+    500: "#1a86ff", // Same in both modes
+    600: mode === "dark" ? "#327e9a" : "#439fff",
+    700: mode === "dark" ? "#245e6f" : "#72b8ff",
+    800: mode === "dark" ? "#1b3a4b" : "#a1cfff",
+    900: mode === "dark" ? "#0d1b2a" : "#d0e7ff",
   }
+  
 });
 
 // Enhanced theme settings with RTL support
@@ -117,13 +129,15 @@ export const themeSettings = (mode, isRtl) => {
       h3: { fontSize: 24, fontWeight: 500 },
       h4: { fontSize: 22, fontWeight: 500 },
       h5: { fontSize: 18, fontWeight: 500 },
+      h5w: { fontSize: 18, fontWeight: 500, color:colors.common.white  },
       h6: { fontSize: 16, fontWeight: 500 },
       subtitle1: { fontSize: 14 },
       subtitle2: { fontSize: 12 },
       body1: { fontSize: 15 },
       body2: { fontSize: 13 },
       button: { fontWeight: 500 },
-      caption: { fontSize: 10 }
+      caption: { fontSize: 10 },
+      captionw: { fontSize: 11, color:colors.common.white }
     },
     components: {
       MuiTypography: {

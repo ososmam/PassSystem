@@ -1,7 +1,7 @@
 // UserDataFetcher.js
 import React, { useState, useEffect, useImperativeHandle, forwardRef } from "react";
 import { firestore } from "./firebaseApp";
-import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 const UserDataFetcher = forwardRef(({ phone, dispatch, setUserData, setLoggedIn }, ref) => {
   const [loading, setLoading] = useState(false);

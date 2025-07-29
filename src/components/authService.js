@@ -12,7 +12,7 @@ import {
     getDoc,
     updateDoc,
     arrayUnion
-  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+  } from "firebase/firestore";
   import {
     signInWithEmailAndPassword,
     signOut,
@@ -20,11 +20,11 @@ import {
     setPersistence,
     browserLocalPersistence,
     RecaptchaVerifier
-  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+  } from "firebase/auth";
   import {
       fetchAndActivate,
       getValue,
-    } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-remote-config.js";
+    } from "firebase/remote-config";
   
   setPersistence(firebaseAuth, browserLocalPersistence);
   

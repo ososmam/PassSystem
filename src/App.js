@@ -68,30 +68,6 @@ useEffect(() => {
   }
 }, []);
 
-// 3. Detect Console Tampering
-// useEffect(() => {
-//   if (process.env.NODE_ENV === 'production') {
-//     const checkConsole = () => {
-//       if (window.outerWidth - window.innerWidth > 200 || 
-//           window.outerHeight - window.innerHeight > 200) {
-//         dispatch({
-//           type: "UPDATE_ALERT",
-//           payload: {
-//             open: true,
-//             severity: "error",
-//             message: isRtl ? "تم اكتشاف انتهاك أمني" : "Security violation detected"
-//           }
-//         });
-//         dispatch({
-//           type: "START_LOADING"});
-//         window.location.reload();
-//       }
-//     };
-
-//     const interval = setInterval(checkConsole, 1000);
-//     return () => clearInterval(interval);
-//   }
-// }, [isRtl, dispatch]);
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       if (user) {

@@ -9,18 +9,18 @@ import {
   updateDoc,
   arrayUnion,
   getDoc,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+} from "firebase/firestore";
 import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   setPersistence,
   browserLocalPersistence,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+} from "firebase/auth";
 import {
   fetchAndActivate,
   getValue,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-remote-config.js";
+} from "firebase/remote-config";
 
 import { firestore, firebaseAuth, remoteConfig } from "./firebaseApp";
 import { v4 as uuidv4 } from "uuid";
@@ -236,115 +236,124 @@ function Login() {
     await login(data);
   };
 
-  async function login(data) {
-    dispatch({ type: "START_LOADING" });
-    const phone = data.get("phone").substring(1);
-    const password = data.get("password");
+ async function login(data) {
+  dispatch({ type: "START_LOADING" });
+  const phone = data.get("phone").substring(1);
+  const password = data.get("password");
 
-    try {
-      // Attempt Firebase authentication
-      await signInWithEmailAndPassword(
-        firebaseAuth,
-        phone + "@dm2.test",
-        password
-      );
+  try {
+    // Call your new .NET API - it handles the priority logic internally
+    const response = await fetch('https://localhost:44323/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        phoneNumber: phone,
+        password: password
+      })
+    });
 
-      // Query user document
-      const userDocRef = collection(firestore, "hosts");
-      const q = query(
-        userDocRef,
-        where("phone", "==", phone),
-        where("verified", "==", true)
-      );
-      const q2 = query(
-        userDocRef,
-        where("secondPhone", "==", phone),
-        where("verified", "==", true)
-      );
+    const result = await response.json();
 
-      const [querySnapshot, querySnapshot2] = await Promise.all([
-        getDocs(q),
-        getDocs(q2),
-      ]);
-      // Check if user exists and is verified
-      if (querySnapshot.empty && querySnapshot2.empty) {
-        throw new Error(
-          lang.notVerified ||
-            "Your account is not verified yet. Please wait for approval."
-        );
-      }
-
-      const userDoc = querySnapshot.docs[0] || querySnapshot2.docs[0];
-      const userData = { ...userDoc.data(), id: userDoc.id };
-      if (userData.endDate && userData.endDate.toDate() < new Date()) {
-        throw new Error(
-          lang.rentalExpired ||
-            "Your rental period has ended. Please contact support."
-        );
-      }
-      // Check device limit
-      const isDeviceAllowed = await checkDeviceLimit(
-        userData.id,
-        currentDeviceId
-      );
-
-      if (!isDeviceAllowed) {
-        throw new Error(
-          lang.deviceLimitReached ||
-            `You've reached the maximum allowed devices (${remoteConfig.defaultConfig.max_allowed_devices}). 
-          Please log out from another device first.`
-        );
-      }
-
-      // Success - update user state and navigate
-      dispatch({ type: "UPDATE_USER", payload: userData });
-      await requestNotificationPermission(userData.id);
-      navigate("/home");
-    } catch (error) {
-      let errorMessage = lang.invalid;
-
-      // Handle specific error cases
-      switch (error.code) {
-        case "auth/invalid-email":
-        case "auth/invalid-credential":
-        case "auth/wrong-password":
-        case "auth/user-not-found":
-          errorMessage =
-            lang.invalidCredentials || "Invalid phone number or password";
-          break;
-        case "auth/too-many-requests":
-          errorMessage =
-            lang.tooManyAttempts ||
-            "Too many attempts. Please try again later.";
-          break;
-        default:
-          // Use the error message we threw earlier or default message
-          errorMessage = error.message || lang.invalid;
-      }
-
-      dispatch({
-        type: "UPDATE_ALERT",
-        payload: {
-          open: true,
-          severity: "error",
-          title: lang.error,
-          message: errorMessage,
-          duration: 6000, // Show for 6 seconds
-        },
-      });
-
-      // Clean up by signing out if authentication succeeded but other checks failed
-      if (firebaseAuth.currentUser) {
-        try {
-          await signOut(firebaseAuth);
-        } catch (signOutError) {
-          console.error("Error during sign out:", signOutError);
-        }
-      }
-    } finally {
-      dispatch({ type: "END_LOADING" });
+    if (!response.ok) {
+      throw new Error(result.message || 'Login failed');
     }
+
+    // Store the JWT token
+    localStorage.setItem('authToken', result.token);
+
+    // Get user data from Firebase Firestore using the phone number
+    // (This remains the same - we still use Firestore for user documents)
+    const userDocRef = collection(firestore, "hosts");
+    const q = query(
+      userDocRef,
+      where("phone", "==", phone),
+      where("verified", "==", true)
+    );
+    const q2 = query(
+      userDocRef,
+      where("secondPhone", "==", phone),
+      where("verified", "==", true)
+    );
+
+    const [querySnapshot, querySnapshot2] = await Promise.all([
+      getDocs(q),
+      getDocs(q2),
+    ]);
+
+    if (querySnapshot.empty && querySnapshot2.empty) {
+      throw new Error(
+        lang.notVerified ||
+          "Your account is not verified yet. Please wait for approval."
+      );
+    }
+
+    const userDoc = querySnapshot.docs[0] || querySnapshot2.docs[0];
+    const userData = { ...userDoc.data(), id: userDoc.id };
+
+    // Check rental expiration
+    if (userData.endDate && userData.endDate.toDate() < new Date()) {
+      throw new Error(
+        lang.rentalExpired ||
+          "Your rental period has ended. Please contact support."
+      );
+    }
+
+    // Check device limit (keep your existing logic)
+    const isDeviceAllowed = await checkDeviceLimit(userData.id, currentDeviceId);
+
+    if (!isDeviceAllowed) {
+      throw new Error(
+        lang.deviceLimitReached ||
+          "Device limit reached. Please log out from another device."
+      );
+    }
+
+    // Show migration success message if applicable
+    // if (result.message.includes('migrated')) {
+    //   dispatch({
+    //     type: "UPDATE_ALERT",
+    //     payload: {
+    //       open: true,
+    //       severity: "success",
+    //       title: "Account Upgraded",
+    //       message: "Your account has been upgraded! You can now reset your password if needed.",
+    //       duration: 5000,
+    //     },
+    //   });
+    // }
+
+    // Success - update user state and navigate
+    dispatch({ type: "UPDATE_USER", payload: userData });
+    await requestNotificationPermission(userData.id);
+    navigate("/home");
+
+  } catch (error) {
+    let errorMessage = lang.invalid;
+
+    // Handle specific error cases
+    if (error.message.includes('Invalid credentials')) {
+      errorMessage = lang.invalidCredentials || "Invalid phone number or password";
+    } else {
+      errorMessage = error.message || lang.invalid;
+    }
+
+    dispatch({
+      type: "UPDATE_ALERT",
+      payload: {
+        open: true,
+        severity: "error",
+        title: lang.error,
+        message: errorMessage,
+        duration: 6000,
+      },
+    });
+  } finally {
+    dispatch({ type: "END_LOADING" });
   }
+}
+
 
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },

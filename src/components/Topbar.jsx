@@ -14,8 +14,8 @@ import {
   doc,
   updateDoc,
   arrayRemove,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-import { signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+} from "firebase/firestore";
+import { signOut } from "firebase/auth";
 import en from "../locales/en.json";
 import ar from "../locales/ar.json";
 import { deleteFcmTokenToServer } from "./messaging";

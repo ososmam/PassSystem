@@ -1,6 +1,6 @@
 {
   "name": "Dar-Masr-Pass",
-  "version": "1.2.1 ",
+  "version": "1.2.3 ",
   "private": true,
   "dependencies": {
     "@azure/storage-blob": "^12.25.0",
@@ -16,7 +16,7 @@
     "buffer": "^6.0.3",
     "dayjs": "^1.11.13",
     "dom-to-image-more": "^3.3.0",
-    "firebase": "^11.0.2",
+    "firebase": "^11.10.0",
     "framer-motion": "^11.12.0",
     "heic2any": "^0.0.4",
     "html-to-image": "^1.11.11",

@@ -4,7 +4,7 @@ import { remoteConfig } from "./firebaseApp";
 import {
     fetchAndActivate,
     getString,
-  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-remote-config.js";
+  } from "firebase/remote-config";
 
 import { Button } from "@mui/material";
 

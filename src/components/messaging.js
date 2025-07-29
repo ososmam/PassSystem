@@ -1,14 +1,14 @@
 import {
   getToken,
   onMessage,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js";
+} from "firebase/messaging";
 import { messaging } from "./firebaseApp"; // Assume messaging is initialized in firebaseApp.js
 import { useValue } from "./ContextProvider"; // Assuming you use a context provider for state management
 import axios from "axios";
 import {
   doc,
   getDoc,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+} from "firebase/firestore";
 import { firestore } from "./firebaseApp"; // Make sure your firestore is initialized
 
 // Request permission to send notifications and get the FCM token

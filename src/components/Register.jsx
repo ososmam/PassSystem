@@ -5,8 +5,8 @@ import {
   setDoc,
   doc,
   Timestamp,
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+} from "firebase/firestore";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { firestore, firebaseAuth } from "./firebaseApp";
 import en from "../locales/en.json";
 import ar from "../locales/ar.json";
