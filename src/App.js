@@ -1,14 +1,14 @@
 import "./App.css";
 
 import CssBaseline from "@mui/material/CssBaseline";
-import {  ThemeProvider } from "@mui/material/styles";
-import React, { useState,  useEffect } from "react";
+import { ThemeProvider } from "@mui/material/styles";
+import React, { useState, useEffect } from "react";
 import Login from "./components/Login";
 import Loading from "./components/Loading";
 import Notification from "./components/Notification";
 import { useValue } from "./components/ContextProvider";
 import QRCodePanel from "./components/QRCodePanel";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import UserPanel from "./components/UserPanel";
 
 import { ColorModeContext, useMode } from "./theme";
@@ -22,12 +22,20 @@ import createCache from "@emotion/cache";
 import { onAuthStateChanged } from "firebase/auth";
 import { firebaseAuth } from "./components/firebaseApp";
 import FloatingButton from "./components/FloatingButton";
+import EmailVerification from "./components/EmailVerification";
+import PasswordReset from "./components/PasswordReset";
+
+import en from "./locales/en.json";
+import ar from "./locales/ar.json";
+
 function App() {
   const { isRtl } = useRtl();
   const [theme, colorMode] = useMode(isRtl);
   const { state, dispatch } = useValue();
   const isLoggedIn = state.currentUser !== null;
   const [isSidebar, setIsSidebar] = useState(true);
+  const location = useLocation();
+  const lang = isRtl ? ar : en;
   const cacheLtr = createCache({
     key: "muiltr",
   });
@@ -51,22 +59,22 @@ function App() {
   // const [alignment, setAlignment] = React.useState(isRtl ? "ar" : "en");
 
   const [isRegistering, setIsRegistering] = useState(false);
-// 2. Disable Console in Production
-useEffect(() => {
-  if (process.env.NODE_ENV === 'production') {
-    console.log = function() {};
-    console.info = function() {};
-    console.warn = function() {};
-    console.error = function() {};
-    console.debug = function() {};
-    
-    Object.defineProperty(window, 'console', {
-      value: console,
-      writable: false,
-      configurable: false
-    });
-  }
-}, []);
+  // 2. Disable Console in Production
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") {
+      console.log = function () {};
+      console.info = function () {};
+      console.warn = function () {};
+      console.error = function () {};
+      console.debug = function () {};
+
+      Object.defineProperty(window, "console", {
+        value: console,
+        writable: false,
+        configurable: false,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
@@ -96,6 +104,28 @@ useEffect(() => {
     setIsRegistering((prev) => !prev);
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const verified = params.get("verified");
+    const status = params.get("status");
+
+    if (verified != null && status) {
+      const isSuccess = status === "success";
+      dispatch({
+        type: "UPDATE_ALERT",
+        payload: {
+          open: true,
+          severity: isSuccess ? "success" : "error",
+          title: isSuccess ? lang.emailVerified : lang.emailVerificationFailed,
+          message: isSuccess
+            ? lang.pleaseTryLogin
+            : lang.verificationLinkInvalid, // or any static error message
+          duration: 6000,
+        },
+      });
+      window.history.replaceState({}, "", location.pathname); // remove query string
+    }
+  }, [location.search]);
 
   return (
     <CacheProvider value={isRtl ? cacheRtl : cacheLtr}>
@@ -115,6 +145,11 @@ useEffect(() => {
                     <Route
                       path="/register"
                       element={<Register toggleRegister={toggleRegister} />}
+                    />
+                    <Route path="/reset-password" element={<PasswordReset />} />
+                    <Route
+                      path="/verify-email"
+                      element={<EmailVerification />}
                     />
                     <Route path="*" element={<Navigate to="/" />} />
                   </>

@@ -101,7 +101,7 @@ function QRCodePanel() {
     }
     const { token, version } = result;
     const json = JSON.stringify({
-      hostId: state.currentUser.id,
+      hostId: state.currentUser.firebaseDocumentId,
       gateId: selectedGate,
     });
 

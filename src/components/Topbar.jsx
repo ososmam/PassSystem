@@ -30,19 +30,29 @@ const Topbar = () => {
 
   const { isRtl, toggleRtl } = useRtl();
   const lang = isRtl ? ar : en;
-  const userId = state.currentUser?.id; // Assumes the user's ID is stored in `state.currentUser`
+  const userId = state.currentUser?.id;
+
   const handleHome = () => {
     navigate("/home");
   };
+
+  // Clear user session function (same as in Login component)
+  const clearUserSession = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("deviceId");
+    dispatch({ type: "UPDATE_USER", payload: null });
+  };
+
   const handleLogout = async () => {
     try {
-      if (userId !== "") {
+      if (userId) {
         // 1. Remove FCM token from server
         await deleteFcmTokenToServer(userId);
-  
+
         const userDocRef = doc(firestore, "hosts", userId);
         const currentDeviceId = localStorage.getItem("deviceId");
-  
+
         if (currentDeviceId) {
           try {
             // 2. Remove current device from user's deviceIds array
@@ -61,20 +71,23 @@ const Topbar = () => {
           }
         }
       }
-  
+
       // 3. Sign out from Firebase
       if (firebaseAuth.currentUser) {
         await signOut(firebaseAuth);
       }
-  
-      // 4. Clear local data
-      localStorage.removeItem("deviceId");
-      dispatch({ type: "UPDATE_USER", payload: null });
-  
+
+      // 4. Clear all user session data (including JWT token)
+      clearUserSession();
+
       // 5. Navigate to login
       navigate("/");
     } catch (error) {
       console.error("Error during logout:", error);
+      
+      // Even if there's an error, clear the session to prevent auto-login
+      clearUserSession();
+      
       dispatch({
         type: "UPDATE_ALERT",
         payload: {
@@ -84,16 +97,19 @@ const Topbar = () => {
           message: lang.logoutError || "Error during logout",
         },
       });
+      
+      // Still navigate to login even if there was an error
+      navigate("/");
     }
   };
 
   return (
     <Box display="flex" justifyContent="space-between" p={2}>
       {/* Left-aligned version text */}
-      <Box >
-      <Typography variant="v" component="div">
-        {version} {isRtl ? ar.beta : en.beta}
-      </Typography>
+      <Box>
+        <Typography variant="v" component="div">
+          {version} {isRtl ? ar.beta : en.beta}
+        </Typography>
         {isLoggedIn && (
           <IconButton onClick={handleLogout}>
             <LogoutOutlinedIcon />
@@ -125,4 +141,5 @@ const Topbar = () => {
     </Box>
   );
 };
+
 export default Topbar;

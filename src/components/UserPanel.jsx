@@ -61,9 +61,9 @@ function UserPanel() {
     navigate("/pass");
   };
 
-  const containerVariants = {
+    const containerVariants = {
     hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
   };
 
   const logoVariants = {
@@ -77,25 +77,21 @@ function UserPanel() {
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <CssBaseline />
-      <Box
-        component={motion.div}
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          mt:1.5,
-          mb:1.5
-        }}
-      >
+    <Container component="main" maxWidth="sm">
+            <Box
+              component={motion.div}
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                minHeight: "100vh",
+                justifyContent: "center",
+              }}
+            >
         <Panel
-          sx={{ width: "100%" }}
-          component={motion.div}
-          variants={containerVariants}
         >
           <motion.img
             src={require("../images/logo192.png")}

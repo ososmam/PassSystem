@@ -1,13 +1,6 @@
 import React, { useState, useContext, useEffect } from "react";
-import {
-  collection,
-  getDoc,
-  setDoc,
-  doc,
-  Timestamp,
-} from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { firestore, firebaseAuth } from "./firebaseApp";
+import { collection, getDoc, setDoc, doc, Timestamp } from "firebase/firestore";
+import { firestore } from "./firebaseApp";
 import en from "../locales/en.json";
 import ar from "../locales/ar.json";
 import {
@@ -55,6 +48,7 @@ const Panel = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   textAlign: "center",
 }));
+
 function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -63,6 +57,7 @@ function Register() {
   const [error, setError] = useState("");
   const [passwordHint, setPasswordHint] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState(""); // Added email field
   const [type, setType] = useState("");
   const [userFound, setUserFound] = useState(false);
   const [rentEndDate, setRentEndDate] = useState(null);
@@ -72,6 +67,7 @@ function Register() {
 
   const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
+  const [emailError, setEmailError] = useState(""); // Added email error
   const [building, setBuilding] = useState("");
   const [name, setName] = useState("");
   const [flat, setFlat] = useState("");
@@ -87,12 +83,17 @@ function Register() {
   const [contractFile, setContractFile] = useState(null);
   const [idFile, setIdFile] = useState(null);
 
-  const [dialogOpen, setDialogOpen] = useState(false); // Dialog open state
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [contractHint, setContractHint] = useState("");
   const [idHint, setIdHint] = useState("");
+
+  // Backend API base URL - adjust this to your backend URL
+  const API_BASE_URL = "https://auth.darmasr2.com/api";
+
   useEffect(() => {
     dayjs.locale(isRtl ? "ar" : "en");
   }, [isRtl]);
+
   const toggleRegister = () => {
     navigate("/");
   };
@@ -111,14 +112,18 @@ function Register() {
       })
       .join("");
   };
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const uploadFileWithAxios = async (file, containerName, docId) => {
     try {
-      // Construct the SAS URL
       const sasURL = new URL(
         `https://darmasr.blob.core.windows.net/darmasr2/${containerName}/${docId}.jpg?sp=racwdli&st=2024-11-17T17:44:11Z&se=2025-11-27T01:44:11Z&sv=2022-11-02&sr=c&sig=USoAvD5pBVHTAbKJeI9EUmGG5aLtC6J04nF%2FUoJC2Ho%3D`
       );
 
-      // Convert HEIC/HEIF to JPEG if needed (iOS images)
       let uploadFile = file;
       if (file.type === "image/heic" || file.type === "image/heif") {
         uploadFile = await convertHeicToJpeg(file);
@@ -139,7 +144,7 @@ function Register() {
       });
 
       if (response.status === 201) {
-        return sasURL.origin + sasURL.pathname; // Return URL without SAS token
+        return sasURL.origin + sasURL.pathname;
       }
       throw new Error(`Upload failed with status ${response.status}`);
     } catch (error) {
@@ -154,19 +159,16 @@ function Register() {
     try {
       console.log("Converting HEIC/HEIF to JPEG...");
 
-      // Convert HEIC/HEIF to JPEG
       const conversionResult = await heic2any({
         blob: file,
         toType: "image/jpeg",
-        quality: 0.9, // Quality between 0 and 1 (default: 0.92)
+        quality: 0.9,
       });
 
-      // The conversion can return either a Blob or an array of Blobs
       const jpegBlob = Array.isArray(conversionResult)
         ? conversionResult[0]
         : conversionResult;
 
-      // Create a new File object with the converted blob
       const jpegFile = new File(
         [jpegBlob],
         file.name.replace(/\.[^/.]+$/, ".jpg"),
@@ -184,25 +186,75 @@ function Register() {
     }
   }
 
+  // Register user with backend API
+  const registerUserWithBackend = async (phoneNumber, password, email) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/auth/register`, {
+        phoneNumber: phoneNumber.substring(1), // Remove leading zero
+        password: password,
+        email: email,
+      });
+
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error) {
+      console.error("Backend registration error:", error);
+
+      let errorMessage = lang.registrationFailed;
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 400) {
+        errorMessage = "Invalid registration data. Please check your inputs.";
+      } else if (error.response?.status === 409) {
+        errorMessage = lang.userAlreadyExists;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  };
+
   const handleTypeChange = (event) => {
     setType(event.target.value);
     if (event.target.value !== "rent") {
       setRentEndDate(null);
     }
   };
+
   const handleRegister = async (event) => {
     event.preventDefault();
+
+    // Reset errors
+    setError("");
+    setNameError("");
+    setBuildingError("");
+    setFlatError("");
+    setPhoneError("");
+    setEmailError("");
+
+    // Validation
     if (!name) {
       setNameError(lang.requiredField);
       return;
     }
-    // Basic validation
     if (!building) {
       setBuildingError(lang.requiredField);
       return;
     }
     if (!flat) {
       setFlatError(lang.requiredField);
+      return;
+    }
+    if (!email) {
+      setEmailError(lang.requiredField);
+      return;
+    }
+    if (!validateEmail(email)) {
+      setEmailError(lang.pleaseEnterValidEmail);
       return;
     }
     if (password !== confirmPassword) {
@@ -216,8 +268,6 @@ function Register() {
     if (phone.length !== 11 || !phone.startsWith("0")) {
       setPhoneError(lang.invalidPhone);
       return;
-    } else {
-      setPhoneError("");
     }
 
     try {
@@ -235,11 +285,13 @@ function Register() {
       });
     }
   };
+
   const resetForm = () => {
     setName("");
     setBuilding("");
     setFlat("");
     setPhone("");
+    setEmail("");
     setPassword("");
     setConfirmPassword("");
     setType("");
@@ -251,9 +303,10 @@ function Register() {
     setBuildingError("");
     setFlatError("");
     setPhoneError("");
+    setEmailError("");
     setPasswordHint("");
-    setDialogOpen(false); // Close dialog
-    setFileErrors({}); // Clear file errors
+    setDialogOpen(false);
+    setFileErrors({});
     setUserFound(false);
   };
 
@@ -268,6 +321,7 @@ function Register() {
       setIdHint("");
     }
   }, [idFile]);
+
   const handleFileUpload = async () => {
     try {
       // Validate files before upload
@@ -290,7 +344,7 @@ function Register() {
       setIsUploading(true);
       dispatch({ type: "START_LOADING" });
 
-      const hostId = `${building}-${flat}${type.charAt(0).toLocaleLowerCase()}`;
+      const hostId = `${building}-${flat}${type.charAt(0).toLowerCase()}`;
       const verifiedRef = doc(firestore, "hosts", hostId);
       const verifiedSnap = await getDoc(verifiedRef);
 
@@ -300,14 +354,13 @@ function Register() {
         flat: parseInt(flat),
         type: type,
         verified: false,
+        email: email, // Add email to host data
       };
 
       if (verifiedSnap.exists()) {
         const verifiedData = verifiedSnap.data();
 
         if (verifiedData.verified === true) {
-
-
           if (
             verifiedData.phone === phone.substring(1) ||
             verifiedData.secondPhone === phone.substring(1)
@@ -360,37 +413,33 @@ function Register() {
         hostData.endDate = Timestamp.fromDate(dateObject);
       }
 
-      const userEmail = `${phone.substring(1)}@dm2.test`;
-
-      // Create user and save data with error handling
-      try {
-        await createUserWithEmailAndPassword(firebaseAuth, userEmail, password);
-        await setDoc(newHostRef, hostData, { merge: true });
-      } catch (authError) {
-        console.error("Authentication error:", authError);
-        // Handle specific auth errors
-        if (authError.code === "auth/email-already-in-use") {
-          throw new Error(lang.userAlreadyExists);
-        } else if (authError.code === "auth/weak-password") {
-          throw new Error(lang.weakPassword);
-        } else {
-          throw new Error(lang.registrationFailed);
-        }
+      // Save to Firestore
+      await setDoc(newHostRef, hostData, { merge: true });
+      const backendResult = await registerUserWithBackend(
+        phone,
+        password,
+        email
+      );
+      if (!backendResult.success) {
+        throw new Error(backendResult.error);
       }
-
       // Success flow
       setIsUploading(false);
       dispatch({ type: "END_LOADING" });
       resetForm();
       setDialogOpen(false);
       navigate("/");
+
+      // Show success message
+      const successMessage = lang.registrationSuccess;
+
       dispatch({
         type: "UPDATE_ALERT",
         payload: {
           open: true,
           severity: "success",
           title: lang.success,
-          message: lang.registrationSuccess,
+          message: successMessage,
         },
       });
     } catch (error) {
@@ -410,7 +459,6 @@ function Register() {
         },
       });
 
-      // Additional error handling for specific cases
       if (error.message === lang.fileUploadFailed) {
         setFileErrors({
           contract: lang.fileUploadFailed,
@@ -420,12 +468,23 @@ function Register() {
     }
   };
 
+  // Handle email change
+  const handleEmailChange = (event) => {
+    const newEmail = event.target.value;
+    setEmail(newEmail);
+
+    if (newEmail && !validateEmail(newEmail)) {
+      setEmailError(lang.pleaseEnterValidEmail);
+    } else {
+      setEmailError("");
+    }
+  };
+
   // Handle password change and set hints
   const handlePasswordChange = (event) => {
     const newPassword = event.target.value;
     setPassword(newPassword);
 
-    // Provide hints for password strength
     if (newPassword.length < 6) {
       setPasswordHint(lang.passwordTooShort);
     } else if (!/\d/.test(newPassword)) {
@@ -433,7 +492,7 @@ function Register() {
     } else if (!/[A-Z]/.test(newPassword)) {
       setPasswordHint(lang.passwordNeedsUppercase);
     } else {
-      setPasswordHint(""); // Password is strong enough
+      setPasswordHint("");
     }
   };
 
@@ -454,7 +513,6 @@ function Register() {
     const newPhone = convertArabicToEnglishNumbers(event.target.value);
     setPhone(newPhone);
 
-    // Reset phone error if the number is valid
     if (newPhone.length === 11 && newPhone.startsWith("0")) {
       setPhoneError("");
     } else {
@@ -466,20 +524,20 @@ function Register() {
   const handleBuildingChange = (event) => {
     const newBuilding = convertArabicToEnglishNumbers(event.target.value);
     setBuilding(newBuilding);
-    setBuildingError(""); // Reset error on change
+    setBuildingError("");
   };
 
   const handleNameChange = (event) => {
     const newName = event.target.value;
     setName(newName);
-    setNameError(""); // Reset error on change
+    setNameError("");
   };
 
   // Handle flat change
   const handleFlatChange = (event) => {
     const newFlat = convertArabicToEnglishNumbers(event.target.value);
     setFlat(newFlat);
-    setFlatError(""); // Reset error on change
+    setFlatError("");
   };
 
   const toggleTermsDialog = () => {
@@ -495,7 +553,9 @@ function Register() {
     !name ||
     !building ||
     !flat ||
+    !email ||
     phoneError ||
+    emailError ||
     !phone ||
     !type ||
     (type === "rent" && !rentEndDate) ||
@@ -528,15 +588,17 @@ function Register() {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, delay: 0.6 } },
   };
+
   const dialogVariants = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
+    initial: { scale: 0, opacity: 0 },
+    animate: { scale: 1, opacity: 1 },
+    transition: { duration: 0.5, delay: 0.3, type: "spring" },
   };
 
   return (
-    <Container component="main" maxWidth="xs">
+    <Container component="main" maxWidth="sm">
       <Box
-        component={motion.div} // Animate the container
+        component={motion.div}
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -544,9 +606,12 @@ function Register() {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
+          minHeight: "100vh",
+          justifyContent: "center",
+          mb: 3,
         }}
       >
-        <Panel width={150}>
+        <Panel>
           <motion.img
             src={require("../images/logo192.png")}
             width={100}
@@ -560,145 +625,154 @@ function Register() {
           <Typography component="h1" variant="h5">
             {lang.register}
           </Typography>
+
           <Box
-            component="form"
+            component={motion.form}
+            variants={formVariants}
+            initial="hidden"
+            animate="visible"
             onSubmit={handleRegister}
-            noValidate
-            sx={{ mt: 1 }}
+            sx={{ width: "100%", maxWidth: 400 }}
           >
-            <motion.div
-              variants={formVariants}
-              initial="hidden"
-              animate="visible"
-            >
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                name="name"
-                type="text"
-                label={lang.name}
-                id="name"
-                value={name}
-                onChange={handleNameChange}
-              />
-              {nameError && <FormHelperText error>{nameError}</FormHelperText>}
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="name"
+              type="text"
+              label={lang.name}
+              id="name"
+              value={name}
+              onChange={handleNameChange}
+            />
+            {nameError && <FormHelperText error>{nameError}</FormHelperText>}
 
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                name="building"
-                type="number"
-                label={lang.building}
-                id="building"
-                value={building}
-                onChange={handleBuildingChange}
-              />
-              {buildingError && (
-                <FormHelperText error>{buildingError}</FormHelperText>
-              )}
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                name="flat"
-                type="number"
-                label={lang.apartment}
-                id="flat"
-                value={flat}
-                onChange={handleFlatChange}
-              />
-              {flatError && <FormHelperText error>{flatError}</FormHelperText>}
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                name="phone"
-                type="number"
-                label={lang.phone}
-                id="phone"
-                value={phone}
-                onChange={handlePhoneChange}
-              />
-              {phoneError && (
-                <FormHelperText error>{phoneError}</FormHelperText>
-              )}
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="building"
+              type="number"
+              label={lang.building}
+              id="building"
+              value={building}
+              onChange={handleBuildingChange}
+            />
+            {buildingError && (
+              <FormHelperText error>{buildingError}</FormHelperText>
+            )}
 
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                name="regPassword"
-                label={lang.password}
-                type={showPassword ? "text" : "password"}
-                id="regPassword"
-                value={password}
-                onChange={handlePasswordChange}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        edge="end"
-                      >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="flat"
+              type="number"
+              label={lang.apartment}
+              id="flat"
+              value={flat}
+              onChange={handleFlatChange}
+            />
+            {flatError && <FormHelperText error>{flatError}</FormHelperText>}
 
-              {passwordHint && (
-                <FormHelperText error>{passwordHint}</FormHelperText>
-              )}
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                name="confirmPassword"
-                label={lang.confirmPassword}
-                type={showConfirmPassword ? "text" : "password"}
-                id="confirmPassword"
-                value={confirmPassword}
-                onChange={handleConfirmPasswordChange}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => setShowConfirmPassword((prev) => !prev)}
-                        edge="end"
-                      >
-                        {showConfirmPassword ? (
-                          <VisibilityOff />
-                        ) : (
-                          <Visibility />
-                        )}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              {error && (
-                <FormHelperText error>{lang.passwordMismatch}</FormHelperText>
-              )}
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="type-label">{lang.userType}</InputLabel>
-                <Select
-                  labelId="type-label"
-                  id="type"
-                  value={type}
-                  onChange={handleTypeChange}
-                  label={lang.userType}
-                >
-                  <MenuItem value="" disabled>
-                    {lang.selectUserType}
-                  </MenuItem>
-                  <MenuItem value="owner">{lang.owner}</MenuItem>
-                  <MenuItem value="rent">{lang.rent}</MenuItem>
-                </Select>
-              </FormControl>
-            </motion.div>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="phone"
+              type="number"
+              label={lang.phone}
+              id="phone"
+              value={phone}
+              onChange={handlePhoneChange}
+            />
+            {phoneError && <FormHelperText error>{phoneError}</FormHelperText>}
+
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="email"
+              type="email"
+              label={lang.emailAddress}
+              id="email"
+              value={email}
+              onChange={handleEmailChange}
+            />
+            {emailError && <FormHelperText error>{emailError}</FormHelperText>}
+
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="regPassword"
+              label={lang.password}
+              type={showPassword ? "text" : "password"}
+              id="regPassword"
+              value={password}
+              onChange={handlePasswordChange}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            {passwordHint && (
+              <FormHelperText error>{passwordHint}</FormHelperText>
+            )}
+
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="confirmPassword"
+              label={lang.confirmPassword}
+              type={showConfirmPassword ? "text" : "password"}
+              id="confirmPassword"
+              value={confirmPassword}
+              onChange={handleConfirmPasswordChange}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      edge="end"
+                    >
+                      {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            {error && (
+              <FormHelperText error>{lang.passwordMismatch}</FormHelperText>
+            )}
+
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="type-label">{lang.userType}</InputLabel>
+              <Select
+                labelId="type-label"
+                id="type"
+                value={type}
+                onChange={handleTypeChange}
+                label={lang.userType}
+              >
+                <MenuItem value="" disabled>
+                  {lang.selectUserType}
+                </MenuItem>
+                <MenuItem value="owner">{lang.owner}</MenuItem>
+                <MenuItem value="rent">{lang.rent}</MenuItem>
+              </Select>
+            </FormControl>
+
             {type === "rent" && (
               <LocalizationProvider dateAdapter={AdapterDayjs}>
                 <motion.div
@@ -709,7 +783,7 @@ function Register() {
                   <FormHelperText>{lang.pleaseSelectDate} </FormHelperText>
                   <br />
                   <DatePicker
-                    label={lang.rentEndDate} // Localized label
+                    label={lang.rentEndDate}
                     value={rentEndDate}
                     onChange={(newValue) => setRentEndDate(newValue)}
                     renderInput={(params) => (
@@ -726,6 +800,7 @@ function Register() {
                 </motion.div>
               </LocalizationProvider>
             )}
+
             <Box display="flex" alignItems="center" mt={2}>
               <input
                 type="checkbox"
@@ -746,6 +821,7 @@ function Register() {
                 {lang.agreeToTerms}
               </Typography>
             </Box>
+
             <motion.div
               variants={buttonVariants}
               initial="hidden"
@@ -774,13 +850,14 @@ function Register() {
           </Box>
         </Panel>
       </Box>
+
       {/* Terms and Conditions Dialog */}
       <Dialog
         open={termsDialogOpen}
         onClose={toggleTermsDialog}
         maxWidth="md"
         fullWidth
-        component={motion.div} // Animate the dialog
+        component={motion.div}
         variants={dialogVariants}
         initial="hidden"
         animate="visible"
@@ -809,13 +886,14 @@ function Register() {
           </Button>
         </DialogActions>
       </Dialog>
+
       {/* File Upload Dialog */}
       <Dialog
         open={dialogOpen}
         onClose={toggleDialog}
         maxWidth="sm"
         fullWidth
-        component={motion.div} // Animate the dialog
+        component={motion.div}
         variants={dialogVariants}
         initial="hidden"
         animate="visible"
@@ -831,18 +909,17 @@ function Register() {
           >
             {lang.uploadInstructions}
           </FormHelperText>
-          {/* File upload status or feedback */}
+
           {contractFile && idFile && idFile.name !== contractFile.name && (
             <FormHelperText sx={{ color: "green" }}>
               {lang.filesReadyToUpload}
             </FormHelperText>
           )}
 
-          {/* File Upload Components */}
           <Grid container spacing={2}>
             <Grid item xs={12}>
               <FileUpload
-                label={lang.contract} // Localized label
+                label={lang.contract}
                 onFileChange={(file, error) => {
                   if (error) {
                     setFileErrors((prev) => ({ ...prev, contract: error }));
@@ -868,7 +945,7 @@ function Register() {
 
             <Grid item xs={12}>
               <FileUpload
-                label={lang.idPhoto} // Localized label
+                label={lang.idPhoto}
                 onFileChange={(file, error) => {
                   if (error) {
                     setFileErrors((prev) => ({ ...prev, id: error }));
@@ -893,7 +970,6 @@ function Register() {
             </Grid>
           </Grid>
 
-          {/* Display loading spinner if uploading */}
           {isUploading && <CircularProgress sx={{ marginTop: 2 }} />}
         </DialogContent>
         <DialogActions>
