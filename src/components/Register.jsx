@@ -121,7 +121,7 @@ function Register() {
   const uploadFileWithAxios = async (file, containerName, docId) => {
     try {
       const sasURL = new URL(
-        `https://darmasr.blob.core.windows.net/darmasr2/${containerName}/${docId}.jpg?sp=racwdli&st=2024-11-17T17:44:11Z&se=2025-11-27T01:44:11Z&sv=2022-11-02&sr=c&sig=USoAvD5pBVHTAbKJeI9EUmGG5aLtC6J04nF%2FUoJC2Ho%3D`
+        `https://darmasr.blob.core.windows.net/darmasr2/${containerName}/${docId}.jpg?sv=2024-11-04&ss=bfqt&srt=co&sp=rwdlacupiytfx&se=2030-11-28T05:52:27Z&st=2025-11-27T21:37:27Z&spr=https&sig=ExWav03Ch4Ab2LScn1%2FFVGlac4OiESsUBV56ssq3H1M%3D`
       );
 
       let uploadFile = file;
@@ -353,14 +353,14 @@ function Register() {
         building: parseInt(building),
         flat: parseInt(flat),
         type: type,
-        verified: false,
+        verifiedAccount: false,
         email: email, // Add email to host data
       };
 
       if (verifiedSnap.exists()) {
         const verifiedData = verifiedSnap.data();
 
-        if (verifiedData.verified === true) {
+        if (verifiedData.verifiedAccount === true) {
           if (
             verifiedData.phone === phone.substring(1) ||
             verifiedData.secondPhone === phone.substring(1)

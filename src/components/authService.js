@@ -109,7 +109,7 @@ import {
       const userDocRef = collection(firestore, "hosts");
       const q = query(userDocRef, 
         where("phone", "==", phone),
-        where("verified", "==", true)
+        where("verifiedAccount", "==", true)
       );
       const querySnapshot = await getDocs(q);
       return querySnapshot.empty ? null : {

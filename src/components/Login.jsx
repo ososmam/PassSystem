@@ -265,7 +265,7 @@ function Login() {
       const userDocRef = doc(firestore, "hosts", firebaseDocId);
       const userDoc = await getDoc(userDocRef);
 
-      if (!userDoc.exists() || !userDoc.data().verified) {
+      if (!userDoc.exists() || !userDoc.data().verifiedAccount) {
         clearUserSession();
         dispatch({ type: "END_LOADING" });
         setIsLoading(false);
@@ -279,24 +279,27 @@ function Login() {
         backendId: userData.id, // Keep backend ID for API calls
       };
 
-      // Check rental expiration
-      if (
-        currentUserData.endDate &&
-        currentUserData.endDate.toDate() < new Date()
-      ) {
-        dispatch({
-          type: "UPDATE_ALERT",
-          payload: {
-            open: true,
-            severity: "error",
-            title: lang.error,
-            message: lang.rentalExpired || "Your rental period has ended",
-          },
-        });
-        clearUserSession();
-        dispatch({ type: "END_LOADING" });
-        setIsLoading(false);
-        return;
+      // Check rental expiration - FIXED
+      if (currentUserData.endDate) {
+        const endDate = currentUserData.endDate.toDate 
+          ? currentUserData.endDate.toDate() 
+          : new Date(currentUserData.endDate);
+        
+        if (endDate < new Date()) {
+          dispatch({
+            type: "UPDATE_ALERT",
+            payload: {
+              open: true,
+              severity: "error",
+              title: lang.error,
+              message: lang.rentalExpired || "Your rental period has ended",
+            },
+          });
+          clearUserSession();
+          dispatch({ type: "END_LOADING" });
+          setIsLoading(false);
+          return;
+        }
       }
 
       // Check device limit - use Firebase document ID for Firebase operations
@@ -384,12 +387,12 @@ function Login() {
           const q = query(
             userDocRef,
             where("phone", "==", phone),
-            where("verified", "==", true)
+            where("verifiedAccount", "==", true)
           );
           const q2 = query(
             userDocRef,
             where("secondPhone", "==", phone),
-            where("verified", "==", true)
+            where("verifiedAccount", "==", true)
           );
 
           const [querySnapshot, querySnapshot2] = await Promise.all([
@@ -424,15 +427,18 @@ function Login() {
               }
             }
 
-            // Check rental expiration
-            if (
-              firestoreUserData.endDate &&
-              firestoreUserData.endDate.toDate() < new Date()
-            ) {
-              throw new Error(
-                lang.rentalExpired ||
-                  "Your rental period has ended. Please contact support."
-              );
+            // Check rental expiration - FIXED
+            if (firestoreUserData.endDate) {
+              const endDate = firestoreUserData.endDate.toDate 
+                ? firestoreUserData.endDate.toDate() 
+                : new Date(firestoreUserData.endDate);
+              
+              if (endDate < new Date()) {
+                throw new Error(
+                  lang.rentalExpired ||
+                    "Your rental period has ended. Please contact support."
+                );
+              }
             }
 
             // Check device limit using Firebase document ID
@@ -520,12 +526,12 @@ function Login() {
             const q = query(
               userDocRef,
               where("phone", "==", phone),
-              where("verified", "==", true)
+              where("verifiedAccount", "==", true)
             );
             const q2 = query(
               userDocRef,
               where("secondPhone", "==", phone),
-              where("verified", "==", true)
+              where("verifiedAccount", "==", true)
             );
 
             const [querySnapshot, querySnapshot2] = await Promise.all([
@@ -602,7 +608,8 @@ function Login() {
       console.error("Login error:", error);
 
       let errorMessage = lang.invalid || "Login failed";
-
+      console.log(error.message);
+      
       // Handle specific error types
       if (error.name === "TypeError" || error.message.includes("fetch")) {
         errorMessage =

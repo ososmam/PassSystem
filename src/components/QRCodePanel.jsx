@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef, useEffect } from "react";
+import React, { useContext, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import QRCode from "react-qr-code";
 import Button from "@mui/material/Button";
 import {
@@ -8,6 +8,7 @@ import {
   styled,
   Paper,
   CssBaseline,
+  TextField,
 } from "@mui/material";
 import { ShareRounded, DownloadingRounded } from "@mui/icons-material";
 import axios from "axios";
@@ -28,6 +29,15 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { GateButtons, useGateConfig } from "./GateButtons";
 import { logEvent } from "firebase/analytics";
+import { 
+  QR_CONFIG, 
+  getQRSize, 
+  getValidityHours, 
+  getAPIEndpoint, 
+  shouldShowElement, 
+  getDisplayFields, 
+  getValidityDisplay 
+} from "../config/qrConfig";
 
 function QRCodePanel() {
   const [qrCodeComponent, setQRCodeComponent] = useState(null);
@@ -40,49 +50,91 @@ function QRCodePanel() {
 
   const [passMessage, setPassMessage] = useState("");
   const [hiddenEndDate, setHiddenEndDate] = useState("");
-  const [apiVersion, setApiVersion] = useState("");
   const [hiddenData, setHiddenData] = useState("");
   const [qrImageUrl, setQrImageUrl] = useState("");
 
-  const lang = isRtl ? ar : en;
+  const lang = useMemo(() => isRtl ? ar : en, [isRtl]);
   const [endDate, setEndDate] = useState(
-    formatDate(Date.now() + 24 * 60 * 60 * 1000, false)
+    new Date(Date.now() + getValidityHours() * 60 * 60 * 1000)
   );
   const pageRef = useRef();
 
   const [selectedGate, setSelectedGate] = useState(0); // State for selected gate (1 or 3)
-  const getGateName = (gateNumber) => {
+  const [visitorName, setVisitorName] = useState(""); // State for visitor name
+  const [showNameInput, setShowNameInput] = useState(false); // State to show name input
+  const [isSubmitting, setIsSubmitting] = useState(false); // State to prevent double submission
+  const visitorNameRef = useRef(null);
+  
+  const formatDate = useCallback((string, bool) => {
+    const options = {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+    };
+    return new Date(string).toLocaleDateString(
+      bool ? (isRtl ? "ar-EG" : "en") : [],
+      options
+    );
+  }, [isRtl]);
+  
+  const captureQRCodeImage = useCallback(async () => {
+    const canvas = await html2canvas(pageRef.current, { scale: 2 });
+    const image = canvas.toDataURL("image/png");
+    setQrImageUrl(image); // Store the generated image URL
+  }, []);
+
+  const getGateName = useCallback((gateNumber) => {
+    if (!gateConfig) return "";
+    
+    const language = isRtl ? 'ar' : 'en';
     switch (gateNumber) {
       case 1:
-        return gateConfig.gate_1.text[isRtl ? "ar" : "en"];
+        return gateConfig.gate_1?.text?.[language] || "";
       case 3:
-        return gateConfig.gate_3.text[isRtl ? "ar" : "en"];
+        return gateConfig.gate_3?.text?.[language] || "";
       case 4:
-        return gateConfig.gate_4.text[isRtl ? "ar" : "en"];
+        return gateConfig.gate_4?.text?.[language] || "";
       case 5:
-        return gateConfig.gate_5.text[isRtl ? "ar" : "en"];
+        return gateConfig.gate_5?.text?.[language] || "";
       default:
-        return gateConfig.gate_1.text[isRtl ? "ar" : "en"]; // Default to Gate 1
+        return "";
     }
-  };
+  }, [gateConfig, isRtl]);
 
-  useEffect(() => {
-    if (selectedGate === 0) return;
-    else {
-      GenerateQRCode();
+  const getSharedToken = useCallback(async () => {
+    try {
+      const [tokenDoc, apiVersionDoc] = await Promise.all([
+        getDoc(doc(firestore, "common", "sharedToken")),
+        getDoc(doc(firestore, "api_config", "version_settings"))
+      ]);
+  
+      if (!tokenDoc.exists()) {
+        console.error("No shared token found.");
+        return null;
+      }
+  
+      let requiredVersion = "1.0"; // default fallback
+      if (apiVersionDoc.exists()) {
+        requiredVersion = apiVersionDoc.data().required_version;
+        console.log("Required API Version:", requiredVersion);
+      } else {
+        console.warn("No API version config found, using default");
+      }
+  
+      return {
+        token: tokenDoc.data().token,
+        version: requiredVersion
+      };
+  
+    } catch (error) {
+      console.error("Error fetching config:", error);
+      return null;
     }
-  }, [selectedGate]);
-  useEffect(() => {
-    setPassMessage(lang.passMessage);
-
-    let selectedGateName = setHiddenEndDate(endDate + ` | ${getGateName}`);
-    setHiddenEndDate(endDate + ` | ${getGateName}`);
-    setHiddenData(
-      `${lang.name} : ${state.currentUser.name} | ${lang.building} : ${state.currentUser.building} | ${lang.apartment} : ${state.currentUser.flat}`
-    );
-  }, [lang, state.currentUser]);
-
-  async function GenerateQRCode() {
+  }, []);
+ 
+   const GenerateQRCode = useCallback(async (nameToUse = visitorName) => {
     // Prevent further POST requests
     dispatch({ type: "START_LOADING" });
     const result = await getSharedToken();
@@ -103,20 +155,21 @@ function QRCodePanel() {
     const json = JSON.stringify({
       hostId: state.currentUser.firebaseDocumentId,
       gateId: selectedGate,
+      name: nameToUse
     });
 
     try {
       const response = await axios.post(
-        "https://gh.darmasr2.com/api/Visitor/AddVisitor",
+        getAPIEndpoint(),
         json,
         {
           headers: {
-            "X-Internal": "web_APP",
-            "Content-Type": "application/json",
+            ...QR_CONFIG.api.headers,
             "Accept-Language": isRtl ? "ar" : "en",
             Authorization: "Bearer " + token,
             "X-API-Version": version,
           },
+          timeout: QR_CONFIG.api.timeout,
         }
       );
 
@@ -126,17 +179,28 @@ function QRCodePanel() {
 
         if (response.data["gatesResult"][0]["success"]) {
 
-          logEvent(analytics, "Qr_Generated", { Gate: selectedGate,
-            timestamp: Date.now() });
+          if (QR_CONFIG.analytics.trackGeneration) {
+            logEvent(analytics, QR_CONFIG.analytics.eventNames.generation, {
+              user_id: state.currentUser.id,
+              gate: selectedGate,
+              name: visitorName,
+            });
+          }
           if (!qrCodeComponent) {
             setQRCodeComponent(
-              <QRCode size={280} fgColor="#00000" value={cardNo.toString()} />
+              <QRCode 
+                size={getQRSize()} 
+                fgColor={QR_CONFIG.appearance.fgColor} 
+                bgColor={QR_CONFIG.appearance.bgColor}
+                level={QR_CONFIG.appearance.level}
+                value={cardNo.toString()} 
+              />
             );
             const now = new Date();
             const tomorrow = new Date(now);
             tomorrow.setDate(now.getDate() + 1);
 
-            setEndDate(formatDate(tomorrow, false));
+            setEndDate(tomorrow);
           }
         } else {
           dispatch({ type: "END_LOADING" });
@@ -157,10 +221,10 @@ function QRCodePanel() {
         // Set hidden data and visibility logic
 
         setPassMessage(lang.passMessage);
-        setHiddenEndDate(endDate + ` | ${getGateName(selectedGate)}`);
-        setHiddenData(
-          `${lang.name} : ${state.currentUser.name} | ${lang.building} : ${state.currentUser.building} | ${lang.apartment} : ${state.currentUser.flat}`
+        setHiddenEndDate(
+          getValidityDisplay(lang, endDate, getGateName(selectedGate), isRtl)
         );
+        // Note: setHiddenData is handled by useEffect when visitorName changes
 
         document.getElementById("qrCode").style.visibility = "visible";
         document.getElementById("qr-download").style.visibility = "visible";
@@ -208,56 +272,121 @@ function QRCodePanel() {
         });
       }
     }
-  }
+  }, [selectedGate, state.currentUser.firebaseDocumentId, state.currentUser.building, state.currentUser.flat, state.currentUser.name, isRtl, lang, dispatch, navigate, getGateName, endDate, captureQRCodeImage, formatDate, getSharedToken, qrCodeComponent]);
 
-  async function captureQRCodeImage() {
-    const canvas = await html2canvas(pageRef.current, { scale: 2 });
-    const image = canvas.toDataURL("image/png");
-    setQrImageUrl(image); // Store the generated image URL
-  }
-  async function getSharedToken() {
-    try {
-      const [tokenDoc, apiVersionDoc] = await Promise.all([
-        getDoc(doc(firestore, "common", "sharedToken")),
-        getDoc(doc(firestore, "api_config", "version_settings"))
-      ]);
-  
-      if (!tokenDoc.exists()) {
-        console.error("No shared token found.");
-        return null;
-      }
-  
-      let requiredVersion = "1.0"; // default fallback
-      if (apiVersionDoc.exists()) {
-        requiredVersion = apiVersionDoc.data().required_version;
-        console.log("Required API Version:", requiredVersion);
-      } else {
-        console.warn("No API version config found, using default");
-      }
-  
-      return {
-        token: tokenDoc.data().token,
-        version: requiredVersion
-      };
-  
-    } catch (error) {
-      console.error("Error fetching config:", error);
-      return null;
+  useEffect(() => {
+    if (selectedGate === 0) return;
+    else {
+      setShowNameInput(true);
     }
-  }
+  }, [selectedGate]);
 
-  async function handleDownload(element, imageFileName) {
+  const handleVisitorNameBlur = useCallback(() => {
+    if (visitorNameRef.current) {
+      setVisitorName(visitorNameRef.current.value);
+    }
+  }, []);
+
+  const handleVisitorNameSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    
+    // Prevent double submission
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    
+    const currentValue = visitorNameRef.current?.value || visitorName;
+    if (!currentValue.trim()) {
+      dispatch({
+        type: "UPDATE_ALERT",
+        payload: {
+          open: true,
+          severity: "error",
+          title: lang.error,
+          message: lang.visitorNameRequired,
+        },
+      });
+      setIsSubmitting(false);
+      return;
+    }
+    
+    setVisitorName(currentValue);
+    setShowNameInput(false);
+    
+    try {
+      // Pass the current value directly to GenerateQRCode to avoid timing issues
+      await GenerateQRCode(currentValue);
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, visitorName, dispatch, lang.error, lang.visitorNameRequired, GenerateQRCode]);
+
+  useEffect(() => {
+    setPassMessage(lang.passMessage);
+    setHiddenData(
+      getDisplayFields(lang, state.currentUser, visitorName, getGateName(selectedGate))
+    );
+  }, [lang, state.currentUser, visitorName, getGateName, selectedGate]);
+
+  const handleDownload = useCallback(async (element, imageFileName) => {
     const textElements = element.querySelectorAll(
       "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
     );
     const originalColors = [];
+    const originalBackgrounds = [];
+    const originalBorders = [];
+    const originalBackground = element.style.backgroundColor;
+    const originalHeight = element.style.height;
+    const originalMinHeight = element.style.minHeight;
+
+    // Find the main container
+    const container = element.querySelector('div > div[style*="display: flex"]') || element.querySelector('div[style*="display: flex"]') || element.firstElementChild;
+    
+    if (!container) {
+      console.error("Container not found for export");
+      return;
+    }
+
+    // Save original container styles
+    const originalJustifyContent = container.style.justifyContent;
+    const originalFlexDirection = container.style.flexDirection;
+    const originalContainerHeight = container.style.height;
 
     textElements.forEach((el, index) => {
       originalColors[index] = el.style.color; // Save original color
+      originalBackgrounds[index] = el.style.backgroundColor; // Save original background
+      originalBorders[index] = el.style.border; // Save original border
+      
       el.style.color = "black"; // Set to black for download
+      
+      // Apply light mode styling to rounded box elements
+      if (el.id === 'hiddenData') {
+        el.style.backgroundColor = "#f5f5f5";
+        el.style.border = "1px solid #e0e0e0";
+      }
     });
+    
+    // Set export dimensions and styles
+    element.style.backgroundColor = "white";
+    element.style.fontFamily = "Tajawal, sans-serif";
+    element.style.height = "100vh";
+    element.style.minHeight = "100vh";
+    element.style.alignItems = "center";
+    
+    // Apply space-between layout to container
+    container.style.height = "100%";
+    
+    container.style.justifyContent = "space-between";
+    container.style.flexDirection = "column";
+    
     try {
-      const canvas = await html2canvas(element, { scale: 2 });
+      const canvas = await html2canvas(element, { 
+        scale: 2,
+        height: window.innerHeight * 0.85,
+        windowHeight: window.innerHeight * 0.85
+      });
       const image = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.href = image;
@@ -266,9 +395,22 @@ function QRCodePanel() {
       link.click();
       document.body.removeChild(link);
 
-      textElements.forEach((el, index) => {
-        el.style.color = originalColors[index];
+      // Restore original styles
+      const restoredTextElements = element.querySelectorAll(
+        "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
+      );
+      restoredTextElements.forEach((el, index) => {
+        if (originalColors[index]) el.style.color = originalColors[index];
+        if (originalBackgrounds[index]) el.style.backgroundColor = originalBackgrounds[index];
+        if (originalBorders[index]) el.style.border = originalBorders[index];
       });
+      element.style.backgroundColor = originalBackground;
+      element.style.height = originalHeight;
+      element.style.minHeight = originalMinHeight;
+      container.style.justifyContent = originalJustifyContent;
+      container.style.flexDirection = originalFlexDirection;
+      container.style.height = originalContainerHeight;
+
     } catch (error) {
       dispatch({
         type: "UPDATE_ALERT",
@@ -280,53 +422,102 @@ function QRCodePanel() {
         },
       });
 
-      textElements.forEach((el, index) => {
-        el.style.color = originalColors[index];
+      // Restore original styles on error
+      const restoredTextElements = element.querySelectorAll(
+        "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
+      );
+      restoredTextElements.forEach((el, index) => {
+        if (originalColors[index]) el.style.color = originalColors[index];
+        if (originalBackgrounds[index]) el.style.backgroundColor = originalBackgrounds[index];
+        if (originalBorders[index]) el.style.border = originalBorders[index];
       });
+      element.style.backgroundColor = originalBackground;
+      element.style.height = originalHeight;
+      element.style.minHeight = originalMinHeight;
+      container.style.justifyContent = originalJustifyContent;
+      container.style.flexDirection = originalFlexDirection;
+      container.style.height = originalContainerHeight;
     }
-  }
+  }, [lang, dispatch]);
 
-  const getGateMessage = (selectedGate) => {
-    let gateLocation;
-    switch (selectedGate) {
-      case 1:
-        gateLocation = lang.Gate1Location;
-        break;
-      case 3:
-        gateLocation = lang.Gate3Location;
-        break;
-      case 4:
-        gateLocation = lang.Gate4Location;
-        break;
-      default:
-        gateLocation = lang.Gate1Location; // default to Gate 1
-    }
-
-    return `${lang.passMessage}\n${gateLocation}`;
-  };
-
-  const handleShare = async (element) => {
+  const handleShare = useCallback(async (element) => {
     const textElements = element.querySelectorAll(
       "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
     );
 
     const originalColors = [];
+    const originalBackgrounds = [];
+    const originalBorders = [];
     const originalBackground = element.style.backgroundColor;
+    const originalHeight = element.style.height;
+    const originalMinHeight = element.style.minHeight;
+
+    // Find the main container
+    const container = element.querySelector('div > div[style*="display: flex"]') || element.querySelector('div[style*="display: flex"]') || element.firstElementChild;
+    
+    if (!container) {
+      console.error("Container not found for export");
+      return;
+    }
+
+    // Save original container styles
+    const originalJustifyContent = container.style.justifyContent;
+    const originalFlexDirection = container.style.flexDirection;
+    const originalContainerHeight = container.style.height;
 
     // Save original colors and set text color to black
     textElements.forEach((el, index) => {
       originalColors[index] = el.style.color;
+      originalBackgrounds[index] = el.style.backgroundColor;
+      originalBorders[index] = el.style.border;
+      
       el.style.color = "black"; // Set to black for download
+      
+      // Apply light mode styling to rounded box elements
+      if (el.id === 'hiddenData') {
+        el.style.backgroundColor = "#f5f5f5";
+        el.style.border = "1px solid #e0e0e0";
+      }
     });
+    
+    // Set export dimensions and styles
     element.style.backgroundColor = "white";
-    element.style.fontFamily = "Tajawal, sans-serif"; // Ensure the font is inline
+    element.style.fontFamily = "Tajawal, sans-serif";
+    element.style.height = "75vh";
+    element.style.minHeight = "75vh";
+  
+    element.style.alignItems = "center";
+
+    // Apply space-between layout to container
+    container.style.height = "100%";
+    container.style.justifyContent = "space-between";
+    container.style.flexDirection = "column";
 
     let newFile;
     try {
-      // Convert the element to a Blob image using toBlob function
-      newFile = await toBlob(element); // Ensure toBlob is working correctly
+      // Convert the element to a Blob image using toBlob function with 90% height
+      newFile = await toBlob(element, {
+        height: window.innerHeight * 0.85,
+        windowHeight: window.innerHeight * 0.85
+      });
     } catch (error) {
       console.error("Error generating the blob:", error);
+      
+      // Restore original styles on error
+      const restoredTextElements = element.querySelectorAll(
+        "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
+      );
+      restoredTextElements.forEach((el, index) => {
+        if (originalColors[index]) el.style.color = originalColors[index];
+        if (originalBackgrounds[index]) el.style.backgroundColor = originalBackgrounds[index];
+        if (originalBorders[index]) el.style.border = originalBorders[index];
+      });
+      element.style.backgroundColor = originalBackground;
+      element.style.height = originalHeight;
+      element.style.minHeight = originalMinHeight;
+      container.style.justifyContent = originalJustifyContent;
+      container.style.flexDirection = originalFlexDirection;
+      container.style.height = originalContainerHeight;
       return;
     }
 
@@ -373,53 +564,52 @@ function QRCodePanel() {
         console.error("Copy to clipboard failed:", clipboardErr);
       }
     } finally {
-      // Always restore the original text colors
-      textElements.forEach((el, index) => {
-        el.style.color = originalColors[index];
-        element.style.backgroundColor = originalBackground;
+      // Restore original styles
+      const restoredTextElements = element.querySelectorAll(
+        "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
+      );
+      restoredTextElements.forEach((el, index) => {
+        if (originalColors[index]) el.style.color = originalColors[index];
+        if (originalBackgrounds[index]) el.style.backgroundColor = originalBackgrounds[index];
+        if (originalBorders[index]) el.style.border = originalBorders[index];
       });
+      element.style.backgroundColor = originalBackground;
+      element.style.height = originalHeight;
+      element.style.minHeight = originalMinHeight;
+      container.style.justifyContent = originalJustifyContent;
+      container.style.flexDirection = originalFlexDirection;
+      container.style.height = originalContainerHeight;
+      
     }
-  };
-
-  function formatDate(string, bool) {
-    const options = {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-    };
-    return new Date(string).toLocaleDateString(
-      bool ? (isRtl ? "ar-EG" : "en") : [],
-      options
-    );
-  }
-  const Panel = styled(Paper)(({ theme }) => ({
+  }, [qrImageUrl, lang, dispatch, getGateName, hiddenData, hiddenEndDate, selectedGate]);
+  
+  const Panel = useMemo(() => styled(Paper)(({ theme }) => ({
     backgroundColor: theme.palette.mode === "dark" ? "#1A2027" : "#FCFCFC",
     alignItems: "center",
     display: "flex",
     flexDirection: "column",
     padding: theme.spacing(3),
     textAlign: "center",
-  }));
+  })), []);
 
-  const containerVariants = {
+  const containerVariants = useMemo(() => ({
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
-  };
+  }), []);
 
-  const logoVariants = {
+  const logoVariants = useMemo(() => ({
     hidden: { scale: 0.8, opacity: 0 },
     visible: {
       scale: 1,
       opacity: 1,
       transition: { duration: 0.5, delay: 0.2 },
     },
-  };
-  const buttonVariants = {
+  }), []);
+  
+  const buttonVariants = useMemo(() => ({
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, delay: 0.6 } },
-  };
+  }), []);
   return (
     <Container component="main" maxWidth="xs">
       {selectedGate === 0 && (
@@ -467,6 +657,71 @@ function QRCodePanel() {
           </div>
         </>
       )}
+      {showNameInput && (
+        <>
+          <div id="visitorNameInput">
+            <CssBaseline />
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                m: 1.5
+              }}
+              component={motion.div}
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              <Panel
+                sx={{ width: "100%" }}
+                component={motion.div}
+                variants={containerVariants}
+              >
+                <motion.img
+                  src={require("../images/logo192.png")}
+                  width={70}
+                  height={"auto"}
+                  alt=""
+                  variants={logoVariants}
+                  initial="hidden"
+                  animate="visible"
+                />
+                <motion.div
+                  variants={buttonVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <br />
+                  <Typography variant="h5">{lang.enterVisitorName}</Typography>
+                  <br />
+                  <form onSubmit={handleVisitorNameSubmit}>
+                    <TextField
+                        fullWidth
+                        label={lang.visitorName}
+                        inputRef={visitorNameRef}
+                        defaultValue={visitorName}
+                        onBlur={handleVisitorNameBlur}
+                        variant="outlined"
+                        sx={{ mt: 2, mb: 2 }}
+                        required
+                      />
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      fullWidth
+                      disabled={isSubmitting}
+                      sx={{ mt: 1, mb: 2 }}
+                    >
+                      {isSubmitting ? lang.loading || 'Loading...' : lang.genrate}
+                    </Button>
+                  </form>
+                </motion.div>
+              </Panel>
+            </Box>
+          </div>
+        </>
+      )}
       <div id="qrCode" ref={pageRef} style={{ visibility: "hidden" }}>
         <Box
           sx={{
@@ -494,10 +749,42 @@ function QRCodePanel() {
           <br />
           {qrCodeComponent}
           <br />
-          <Typography variant="caption" id="hiddenData">
+          <Typography 
+            variant="body2" 
+            id="hiddenData"
+            sx={{
+              whiteSpace: 'pre',
+              lineHeight: 1.8,
+              fontWeight: 500,
+              color: 'text.primary',
+              mb: 2,
+              px: 2,
+              py: 1.5,
+              fontFamily: 'monospace',
+              textAlign: 'left',
+              display: 'block',
+              backgroundColor: 'background.paper',
+              borderRadius: '12px',
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+              direction: 'ltr'
+            }}
+          >
             {hiddenData}
           </Typography>
-          <Typography variant="caption" id="hiddenEndDate">
+          <Typography 
+            variant="body2" 
+            id="hiddenEndDate"
+            sx={{ 
+              whiteSpace: 'pre-line', 
+              lineHeight: 1.6,
+              fontWeight: 400,
+              color: 'text.secondary',
+              fontStyle: 'italic',
+              px: 1,
+              direction: 'ltr',
+              textAlign: 'center'
+            }}
+          >
             {hiddenEndDate}
           </Typography>
         </Box>

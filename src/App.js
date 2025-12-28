@@ -2,7 +2,7 @@ import "./App.css";
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Login from "./components/Login";
 import Loading from "./components/Loading";
 import Notification from "./components/Notification";
@@ -24,7 +24,7 @@ import { firebaseAuth } from "./components/firebaseApp";
 import FloatingButton from "./components/FloatingButton";
 import EmailVerification from "./components/EmailVerification";
 import PasswordReset from "./components/PasswordReset";
-
+import UpdateData from "./components/UpdateData";
 import en from "./locales/en.json";
 import ar from "./locales/ar.json";
 
@@ -36,26 +36,27 @@ function App() {
   const [isSidebar, setIsSidebar] = useState(true);
   const location = useLocation();
   const lang = isRtl ? ar : en;
-  const cacheLtr = createCache({
+  
+  const cacheLtr = useMemo(() => createCache({
     key: "muiltr",
-  });
+  }), []);
 
-  const cacheRtl = createCache({
+  const cacheRtl = useMemo(() => createCache({
     key: "muirtl",
     // prefixer is the only stylis plugin by default, so when
     // overriding the plugins you need to include it explicitly
     // if you want to retain the auto-prefixing behavior.
     stylisPlugins: [prefixer, rtlPlugin],
-  });
-  const rtlTheme = {
+  }), []);
+  const rtlTheme = useMemo(() => ({
     ...theme,
     direction: "rtl", // Set the direction to RTL
-  };
+  }), [theme]);
 
-  const ltrTheme = {
+  const ltrTheme = useMemo(() => ({
     ...theme,
     direction: "ltr", // Set the direction to LTR
-  };
+  }), [theme]);
   // const [alignment, setAlignment] = React.useState(isRtl ? "ar" : "en");
 
   const [isRegistering, setIsRegistering] = useState(false);
@@ -151,6 +152,7 @@ function App() {
                       path="/verify-email"
                       element={<EmailVerification />}
                     />
+                    <Route path="/update" element={<UpdateData />} />
                     <Route path="*" element={<Navigate to="/" />} />
                   </>
                 ) : (

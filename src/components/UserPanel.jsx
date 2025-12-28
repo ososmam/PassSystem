@@ -88,7 +88,7 @@ function UserPanel() {
                 flexDirection: "column",
                 alignItems: "center",
                 minHeight: "100vh",
-                justifyContent: "center",
+                justifyContent: "flex-start",
               }}
             >
         <Panel
@@ -104,7 +104,7 @@ function UserPanel() {
           />
           <br />
 
-          <Paper  sx={{ width: "100%", padding: 1.5 , backgroundColor: bgColor }}>
+          <Paper  sx={{ width: "100%", padding: 1 , backgroundColor: bgColor }}>
             <Typography variant="h5w" >
               {lang.welcome}{lang.comma} {state.currentUser.name.trim()}!
             </Typography>
