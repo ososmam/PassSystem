@@ -19,8 +19,7 @@ import { prefixer } from "stylis";
 import rtlPlugin from "stylis-plugin-rtl";
 import { CacheProvider } from "@emotion/react";
 import createCache from "@emotion/cache";
-import { onAuthStateChanged } from "firebase/auth";
-import { firebaseAuth } from "./components/firebaseApp";
+
 import FloatingButton from "./components/FloatingButton";
 import EmailVerification from "./components/EmailVerification";
 import PasswordReset from "./components/PasswordReset";
@@ -36,7 +35,7 @@ function App() {
   const [isSidebar, setIsSidebar] = useState(true);
   const location = useLocation();
   const lang = isRtl ? ar : en;
-  
+
   const cacheLtr = useMemo(() => createCache({
     key: "muiltr",
   }), []);
@@ -63,11 +62,11 @@ function App() {
   // 2. Disable Console in Production
   useEffect(() => {
     if (process.env.NODE_ENV === "production") {
-      console.log = function () {};
-      console.info = function () {};
-      console.warn = function () {};
-      console.error = function () {};
-      console.debug = function () {};
+      console.log = function () { };
+      console.info = function () { };
+      console.warn = function () { };
+      console.error = function () { };
+      console.debug = function () { };
 
       Object.defineProperty(window, "console", {
         value: console,
@@ -77,29 +76,7 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-      if (user) {
-        // Send a message to the service worker to inform about the user being logged in
-        if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: "SET_USER_AUTH_STATE",
-            isLoggedIn: true,
-          });
-        }
-      } else {
-        // Send a message to the service worker to inform about the user being logged out
-        if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: "SET_USER_AUTH_STATE",
-            isLoggedIn: false,
-          });
-        }
-      }
-    });
 
-    return () => unsubscribe(); // Cleanup on component unmount
-  }, []);
 
   const toggleRegister = () => {
     setIsRegistering((prev) => !prev);

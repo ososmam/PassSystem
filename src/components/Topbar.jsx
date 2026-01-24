@@ -1,24 +1,16 @@
 import { Box, IconButton, useTheme, Typography } from "@mui/material";
 import { useContext } from "react";
 import { ColorModeContext } from "../theme";
-import { firebaseAuth, firestore } from "./firebaseApp";
+import { apiClient } from "../apiClient";
+import { useNavigate } from "react-router-dom";
+import { useValue } from "./ContextProvider";
+import { useRtl } from "./RtlContext";
+import ar from "../locales/ar.json";
+import en from "../locales/en.json";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
-import { useRtl } from "./RtlContext";
-import React from "react";
-import { useValue } from "./ContextProvider";
-import { useNavigate } from "react-router-dom";
-import {
-  doc,
-  updateDoc,
-  arrayRemove,
-} from "firebase/firestore";
-import { signOut } from "firebase/auth";
-import en from "../locales/en.json";
-import ar from "../locales/ar.json";
-import { deleteFcmTokenToServer } from "./messaging";
 
 const Topbar = () => {
   const theme = useTheme();
@@ -47,47 +39,27 @@ const Topbar = () => {
   const handleLogout = async () => {
     try {
       if (userId) {
-        // 1. Remove FCM token from server
-        await deleteFcmTokenToServer(userId);
-
-        const userDocRef = doc(firestore, "hosts", userId);
         const currentDeviceId = localStorage.getItem("deviceId");
-
         if (currentDeviceId) {
           try {
-            // 2. Remove current device from user's deviceIds array
-            await updateDoc(userDocRef, {
-              deviceIds: arrayRemove(currentDeviceId)
-            });
-          } catch (error) {
-            console.error("Error removing device from list:", error);
-            
-            // Fallback: Try the old method if deviceIds array doesn't exist
-            try {
-              await updateDoc(userDocRef, { deviceId: "" });
-            } catch (fallbackError) {
-              console.error("Fallback error clearing deviceId:", fallbackError);
-            }
+            await apiClient.removeDevice(userId, currentDeviceId);
+          } catch (e) {
+            console.error("Failed to remove device:", e);
           }
         }
       }
 
-      // 3. Sign out from Firebase
-      if (firebaseAuth.currentUser) {
-        await signOut(firebaseAuth);
-      }
-
-      // 4. Clear all user session data (including JWT token)
+      // Clear all user session data (including JWT token)
       clearUserSession();
 
-      // 5. Navigate to login
+      // Navigate to login
       navigate("/");
     } catch (error) {
       console.error("Error during logout:", error);
-      
+
       // Even if there's an error, clear the session to prevent auto-login
       clearUserSession();
-      
+
       dispatch({
         type: "UPDATE_ALERT",
         payload: {
@@ -97,8 +69,7 @@ const Topbar = () => {
           message: lang.logoutError || "Error during logout",
         },
       });
-      
-      // Still navigate to login even if there was an error
+
       navigate("/");
     }
   };

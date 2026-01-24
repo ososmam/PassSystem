@@ -1,6 +1,5 @@
 import React, { useState, useContext, useEffect, useCallback } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { firestore } from "./firebaseApp";
+
 import en from "../locales/en.json";
 import ar from "../locales/ar.json";
 import {
@@ -63,7 +62,7 @@ function UpdateData() {
   const [flatError, setFlatError] = useState("");
 
   const { isRtl } = useContext(RtlContext);
-  const { dispatch } = useValue();
+  const { dispatch, state } = useValue();
   const lang = isRtl ? ar : en;
   const navigate = useNavigate();
 
@@ -87,37 +86,6 @@ function UpdateData() {
     dayjs.locale(isRtl ? "ar" : "en");
   }, [isRtl]);
 
-const getSharedToken = useCallback(async () => {
-    try {
-      const [tokenDoc, apiVersionDoc] = await Promise.all([
-        getDoc(doc(firestore, "common", "sharedToken")),
-        getDoc(doc(firestore, "api_config", "version_settings"))
-      ]);
-  
-      if (!tokenDoc.exists()) {
-        console.error("No shared token found.");
-        return null;
-      }
-  
-      let requiredVersion = "1.0"; // default fallback
-      if (apiVersionDoc.exists()) {
-        requiredVersion = apiVersionDoc.data().required_version;
-        console.log("Required API Version:", requiredVersion);
-      } else {
-        console.warn("No API version config found, using default");
-      }
-  
-      return {
-        token: tokenDoc.data().token,
-        version: requiredVersion
-      };
-  
-    } catch (error) {
-      console.error("Error fetching config:", error);
-      return null;
-    }
-  }, []);
-
   const convertArabicToEnglishNumbers = (input) => {
     const arabicNumbers = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
     return input
@@ -131,9 +99,21 @@ const getSharedToken = useCallback(async () => {
 
   const uploadFileWithAxios = async (file, containerName, docId) => {
     try {
-      const sasURL = new URL(
-        `https://darmasr.blob.core.windows.net/darmasr2/${containerName}/${docId}.jpg?sv=2024-11-04&ss=bfqt&srt=co&sp=rwdlacupiytfx&se=2030-11-28T05:52:27Z&st=2025-11-27T21:37:27Z&spr=https&sig=ExWav03Ch4Ab2LScn1%2FFVGlac4OiESsUBV56ssq3H1M%3D`
+      // Fetch SAS token securely from backend
+      const sasResponse = await axios.get(
+        `${process.env.REACT_APP_API_BASE_URL}/api/Config/sas-token`,
+        {
+          headers: {
+            Authorization: `Bearer ${state.token}`,
+          },
+        }
       );
+      const sasToken = sasResponse.data.token;
+      const accountName = "darmasr";
+      const containerURL = `https://${accountName}.blob.core.windows.net/${containerName}`;
+      const blobName = `${docId}.jpg`;
+      const sasURL = `${containerURL}/${blobName}?${sasToken}`;
+
 
       let uploadFile = file;
       if (file.type === "image/heic" || file.type === "image/heif") {
@@ -155,7 +135,8 @@ const getSharedToken = useCallback(async () => {
       });
 
       if (response.status === 201) {
-        return sasURL.origin + sasURL.pathname;
+        // Return URL without SAS token
+        return `${containerURL}/${blobName}`;
       }
       throw new Error(`Upload failed with status ${response.status}`);
     } catch (error) {
@@ -388,11 +369,11 @@ const getSharedToken = useCallback(async () => {
         Type: type.toLowerCase(),
         Phone: phone.startsWith("1") ? phone : phone.substring(1), // Ensure phone starts with 1
         CardsInfo: entries
-  .filter((e) => (e.cardNumber && e.cardNumber.trim() !== "") || (e.carPlate && e.carPlate.trim() !== ""))
-  .map((e) => ({
-    Card: e.cardNumber ? e.cardNumber.trim() : "",
-    CarPlate: e.carPlate ? e.carPlate.trim() : ""
-  })),
+          .filter((e) => (e.cardNumber && e.cardNumber.trim() !== "") || (e.carPlate && e.carPlate.trim() !== ""))
+          .map((e) => ({
+            Card: e.cardNumber ? e.cardNumber.trim() : "",
+            CarPlate: e.carPlate ? e.carPlate.trim() : ""
+          })),
         IdPhoto: idPhotoUrl,
         Contract: contractUrl,
         Verified: false,
@@ -413,27 +394,11 @@ const getSharedToken = useCallback(async () => {
         UseVerificationWorkflow: true,
       };
 
-      const result = await getSharedToken();
-    if (!result) {
-      dispatch({ type: "END_LOADING" });
-      dispatch({
-        type: "UPDATE_ALERT",
-        payload: {
-          open: true,
-          severity: "error",
-          title: lang.error,
-          message: lang.failed,
-        },
-      });
-      return;
-    }
-    const { token, version } = result;
       // Call the PropertyController endpoint
-      const response = await axios.post("https://gh.darmasr2.com/api/property/update", updateRequest, {
+      const response = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/api/Property/update`, updateRequest, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-          "X-API-Version": version,
+          Authorization: "Bearer " + state.token,
         },
       });
 

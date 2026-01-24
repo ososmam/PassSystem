@@ -1,35 +1,28 @@
-// UserDataFetcher.js
 import React, { useState, useEffect, useImperativeHandle, forwardRef } from "react";
-import { firestore } from "./firebaseApp";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { apiClient } from "../apiClient";
 
 const UserDataFetcher = forwardRef(({ phone, dispatch, setUserData, setLoggedIn }, ref) => {
   const [loading, setLoading] = useState(false);
 
-  // Get user data from Firestore
+  // Get user data from API
   const getUserData = async (phone) => {
-    setLoading(true); // Set loading to true
-    console.log("Fetching user data for phone:", phone); // Debugging
+    setLoading(true);
+    console.log("Fetching user data for phone:", phone);
     try {
-      const userDocRef = collection(firestore, "hosts");
-      const q = query(userDocRef, where("phone", "==", phone));
-      const querySnapshot = await getDocs(q);
+      const data = await apiClient.getPropertyByPhone(phone);
 
-      if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0]; // Get the first matching document
-        const data = userDoc.data();
-
+      if (data) {
         // Update user data and loggedIn state
         setUserData({
           name: data.name,
           flat: data.flat,
           building: data.building,
           phone: data.phone,
-          userid: userDoc.id.toString(),
+          userid: data.hostId || data.id,
         });
 
-        setLoggedIn(true); 
-        
+        setLoggedIn(true);
+
         dispatch({
           type: "END_LOADING",
         });
@@ -38,7 +31,10 @@ const UserDataFetcher = forwardRef(({ phone, dispatch, setUserData, setLoggedIn 
         handleError();
       }
     } catch (error) {
+      console.error(error);
       handleError();
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -50,6 +46,7 @@ const UserDataFetcher = forwardRef(({ phone, dispatch, setUserData, setLoggedIn 
     dispatch({
       type: "END_LOADING",
     });
+    setLoading(false);
     dispatch({
       type: "UPDATE_ALERT",
       payload: {
@@ -63,7 +60,7 @@ const UserDataFetcher = forwardRef(({ phone, dispatch, setUserData, setLoggedIn 
 
   useEffect(() => {
     if (phone) {
-      getUserData(phone); // Call getUserData when phone prop changes
+      getUserData(phone);
     }
   }, [phone]);
 
@@ -71,7 +68,7 @@ const UserDataFetcher = forwardRef(({ phone, dispatch, setUserData, setLoggedIn 
     return <div>Loading...</div>;
   }
 
-  return null; // No need to render anything directly here
+  return null;
 });
 
 export default UserDataFetcher;

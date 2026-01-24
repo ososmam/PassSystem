@@ -12,12 +12,11 @@ import {
 import { motion } from "framer-motion";
 import en from "../../src/locales/en.json";
 import ar from "../../src/locales/ar.json";
-import { QrCodeScanner,Announcement } from "@mui/icons-material";
+import { QrCodeScanner, Announcement } from "@mui/icons-material";
 import { useValue } from "./ContextProvider";
 import { RtlContext } from "./RtlContext";
 import { useNavigate } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
-import { firestore } from "./firebaseApp";
+import axios from "axios";
 
 function UserPanel() {
   const navigate = useNavigate();
@@ -27,18 +26,13 @@ function UserPanel() {
   const [news, setNews] = useState(null);
   const theme = useTheme();
   const bgColor = theme.palette.mode === "dark"
-  ? theme.palette.blueAccent?.[600] || "#246bb2" 
-  : theme.palette.blueAccent?.[100] || "#439fff";
+    ? theme.palette.blueAccent?.[600] || "#246bb2"
+    : theme.palette.blueAccent?.[100] || "#439fff";
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const docRef = doc(firestore, "api_config", "news");
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setNews(docSnap.data()); // { en: "...", ar: "..." }
-        } else {
-          setNews({ en: en.noNews, ar: ar.noNews });
-        }
+        const response = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/Config/news`);
+        setNews(response.data);
       } catch (error) {
         console.error("Error fetching news:", error);
         setNews({ en: en.noNews, ar: ar.noNews });
@@ -61,7 +55,7 @@ function UserPanel() {
     navigate("/pass");
   };
 
-    const containerVariants = {
+  const containerVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
   };
@@ -78,19 +72,19 @@ function UserPanel() {
 
   return (
     <Container component="main" maxWidth="sm">
-            <Box
-              component={motion.div}
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                minHeight: "100vh",
-                justifyContent: "flex-start",
-              }}
-            >
+      <Box
+        component={motion.div}
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          minHeight: "100vh",
+          justifyContent: "flex-start",
+        }}
+      >
         <Panel
         >
           <motion.img
@@ -104,11 +98,11 @@ function UserPanel() {
           />
           <br />
 
-          <Paper  sx={{ width: "100%", padding: 1 , backgroundColor: bgColor }}>
+          <Paper sx={{ width: "100%", padding: 1, backgroundColor: bgColor }}>
             <Typography variant="h5w" >
               {lang.welcome}{lang.comma} {state.currentUser.name.trim()}!
             </Typography>
-            <br/>
+            <br />
             <Typography variant="captionw">
               {lang.building} {state.currentUser.building} {lang.apartment} {state.currentUser.flat}
             </Typography>
@@ -135,7 +129,7 @@ function UserPanel() {
                   mb: 1,
                 }}
               >
-                <QrCodeScanner/>
+                <QrCodeScanner />
                 <Typography variant="h6">{lang.passes}</Typography>
               </Box>
               <motion.div variants={buttonVariants} initial="hidden" animate="visible">
@@ -162,7 +156,7 @@ function UserPanel() {
                   mb: 1,
                 }}
               >
-                <Announcement/>
+                <Announcement />
                 <Typography variant="h6">{lang.news}</Typography>
               </Box>
               <Typography variant="body2">

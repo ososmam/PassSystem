@@ -1,6 +1,5 @@
 import React, { useState, useContext, useEffect } from "react";
-import { collection, getDoc, setDoc, doc, Timestamp } from "firebase/firestore";
-import { firestore } from "./firebaseApp";
+import { apiClient } from "../apiClient";
 import en from "../locales/en.json";
 import ar from "../locales/ar.json";
 import {
@@ -87,11 +86,25 @@ function Register() {
   const [contractHint, setContractHint] = useState("");
   const [idHint, setIdHint] = useState("");
 
-  // Backend API base URL - adjust this to your backend URL
-  const API_BASE_URL = "https://auth.darmasr2.com/api";
+
+
+  const [sasToken, setSasToken] = useState("");
 
   useEffect(() => {
     dayjs.locale(isRtl ? "ar" : "en");
+
+    // Fetch SAS Token
+    const fetchSasToken = async () => {
+      try {
+        const token = await apiClient.getSasToken();
+        if (token) {
+          setSasToken(token);
+        }
+      } catch (error) {
+        console.error("Failed to fetch SAS token", error);
+      }
+    };
+    fetchSasToken();
   }, [isRtl]);
 
   const toggleRegister = () => {
@@ -120,8 +133,11 @@ function Register() {
 
   const uploadFileWithAxios = async (file, containerName, docId) => {
     try {
+      if (!sasToken) throw new Error("Upload configuration missing. Please try again later.");
+
+      const blobName = `${docId}.jpg`;
       const sasURL = new URL(
-        `https://darmasr.blob.core.windows.net/darmasr2/${containerName}/${docId}.jpg?sv=2024-11-04&ss=bfqt&srt=co&sp=rwdlacupiytfx&se=2030-11-28T05:52:27Z&st=2025-11-27T21:37:27Z&spr=https&sig=ExWav03Ch4Ab2LScn1%2FFVGlac4OiESsUBV56ssq3H1M%3D`
+        `https://darmasr.blob.core.windows.net/darmasr2/${containerName}/${blobName}${sasToken}`
       );
 
       let uploadFile = file;
@@ -189,32 +205,11 @@ function Register() {
   // Register user with backend API
   const registerUserWithBackend = async (phoneNumber, password, email) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/register`, {
-        phoneNumber: phoneNumber.substring(1), // Remove leading zero
-        password: password,
-        email: email,
-      });
-
-      return {
-        success: true,
-        data: response.data,
-      };
+      return await apiClient.registerUser(phoneNumber.replace(/^0/, ''), password, email);
     } catch (error) {
       console.error("Backend registration error:", error);
-
-      let errorMessage = lang.registrationFailed;
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.status === 400) {
-        errorMessage = "Invalid registration data. Please check your inputs.";
-      } else if (error.response?.status === 409) {
-        errorMessage = lang.userAlreadyExists;
-      }
-
-      return {
-        success: false,
-        error: errorMessage,
-      };
+      // Should rely on apiClient return structure or error handling
+      return { success: false, error: "Registration failed" };
     }
   };
 
@@ -345,43 +340,8 @@ function Register() {
       dispatch({ type: "START_LOADING" });
 
       const hostId = `${building}-${flat}${type.charAt(0).toLowerCase()}`;
-      const verifiedRef = doc(firestore, "hosts", hostId);
-      const verifiedSnap = await getDoc(verifiedRef);
 
-      const hostData = {
-        name: name,
-        building: parseInt(building),
-        flat: parseInt(flat),
-        type: type,
-        verifiedAccount: false,
-        email: email, // Add email to host data
-      };
-
-      if (verifiedSnap.exists()) {
-        const verifiedData = verifiedSnap.data();
-
-        if (verifiedData.verifiedAccount === true) {
-          if (
-            verifiedData.phone === phone.substring(1) ||
-            verifiedData.secondPhone === phone.substring(1)
-          ) {
-            throw new Error(lang.userAlreadyExists);
-          }
-
-          if (verifiedData.phone && verifiedData.secondPhone) {
-            throw new Error(lang.maxUsersPerUnit);
-          }
-          hostData.name = verifiedData.name.toString();
-          hostData.phone = verifiedData.phone.toString();
-          hostData.secondPhone = phone.substring(1);
-        } else {
-          hostData.phone = phone.substring(1);
-        }
-      } else {
-        hostData.phone = phone.substring(1);
-      }
-
-      // Upload files with error handling
+      // Step 1: Upload Files
       let contractUrl, idPhotoUrl;
       try {
         contractUrl = await uploadFileWithAxios(
@@ -400,21 +360,7 @@ function Register() {
         throw new Error(lang.fileUploadFailed);
       }
 
-      const newHostRef = doc(firestore, "unverified", hostId);
-
-      hostData.contract = contractUrl;
-      hostData.idPhoto = idPhotoUrl;
-
-      if (type === "rent") {
-        if (!rentEndDate) {
-          throw new Error(lang.rentEndDateRequired);
-        }
-        const dateObject = dayjs(rentEndDate).toDate();
-        hostData.endDate = Timestamp.fromDate(dateObject);
-      }
-
-      // Save to Firestore
-      await setDoc(newHostRef, hostData, { merge: true });
+      // Step 2: Register User (Auth API)
       const backendResult = await registerUserWithBackend(
         phone,
         password,
@@ -423,6 +369,38 @@ function Register() {
       if (!backendResult.success) {
         throw new Error(backendResult.error);
       }
+
+      // Step 3: Register Property (Gate API)
+      const propertyData = {
+        name: name,
+        building: parseInt(building),
+        flat: parseInt(flat),
+        type: type,
+        phone: phone.substring(1),
+        email: email,
+        contract: contractUrl,     // Map URL to field name expected by Property Model (although we use request.ContractUrl too)
+        idPhoto: idPhotoUrl        // Map URL
+      };
+
+      if (type === "rent") {
+        if (!rentEndDate) {
+          // Should be caught by validation, but just in case
+        } else {
+          // Convert to ISO string or whatever backend expects. Property.EndDate is string?
+          // Let's check PendingProperty serialization.
+          // Property.EndDate is string.
+          propertyData.endDate = dayjs(rentEndDate).format("YYYY-MM-DD");
+        }
+      }
+
+      // Call usage of new endpoint
+      await apiClient.registerProperty({
+        property: propertyData,
+        submittedBy: name,
+        contractUrl: contractUrl,
+        idPhotoUrl: idPhotoUrl
+      });
+
       // Success flow
       setIsUploading(false);
       dispatch({ type: "END_LOADING" });

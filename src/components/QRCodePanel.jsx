@@ -14,29 +14,25 @@ import { ShareRounded, DownloadingRounded } from "@mui/icons-material";
 import axios from "axios";
 import en from "../../src/locales/en.json";
 import ar from "../../src/locales/ar.json";
-import { firestore, analytics } from "./firebaseApp";
-import * as html2canvas from "html2canvas";
-import {
-  getDoc,
-  doc,
-} from "firebase/firestore";
+import { apiClient } from "../apiClient";
 
 import { useValue } from "./ContextProvider";
 import { RtlContext } from "./RtlContext";
 
 import { toBlob } from "html-to-image";
+import html2canvas from "html2canvas";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { GateButtons, useGateConfig } from "./GateButtons";
-import { logEvent } from "firebase/analytics";
-import { 
-  QR_CONFIG, 
-  getQRSize, 
-  getValidityHours, 
-  getAPIEndpoint, 
-  shouldShowElement, 
-  getDisplayFields, 
-  getValidityDisplay 
+
+import {
+  QR_CONFIG,
+  getQRSize,
+  getValidityHours,
+  getAPIEndpoint,
+  shouldShowElement,
+  getDisplayFields,
+  getValidityDisplay
 } from "../config/qrConfig";
 
 function QRCodePanel() {
@@ -64,7 +60,7 @@ function QRCodePanel() {
   const [showNameInput, setShowNameInput] = useState(false); // State to show name input
   const [isSubmitting, setIsSubmitting] = useState(false); // State to prevent double submission
   const visitorNameRef = useRef(null);
-  
+
   const formatDate = useCallback((string, bool) => {
     const options = {
       year: "numeric",
@@ -78,7 +74,7 @@ function QRCodePanel() {
       options
     );
   }, [isRtl]);
-  
+
   const captureQRCodeImage = useCallback(async () => {
     const canvas = await html2canvas(pageRef.current, { scale: 2 });
     const image = canvas.toDataURL("image/png");
@@ -87,7 +83,7 @@ function QRCodePanel() {
 
   const getGateName = useCallback((gateNumber) => {
     if (!gateConfig) return "";
-    
+
     const language = isRtl ? 'ar' : 'en';
     switch (gateNumber) {
       case 1:
@@ -103,152 +99,91 @@ function QRCodePanel() {
     }
   }, [gateConfig, isRtl]);
 
-  const getSharedToken = useCallback(async () => {
-    try {
-      const [tokenDoc, apiVersionDoc] = await Promise.all([
-        getDoc(doc(firestore, "common", "sharedToken")),
-        getDoc(doc(firestore, "api_config", "version_settings"))
-      ]);
-  
-      if (!tokenDoc.exists()) {
-        console.error("No shared token found.");
-        return null;
-      }
-  
-      let requiredVersion = "1.0"; // default fallback
-      if (apiVersionDoc.exists()) {
-        requiredVersion = apiVersionDoc.data().required_version;
-        console.log("Required API Version:", requiredVersion);
-      } else {
-        console.warn("No API version config found, using default");
-      }
-  
-      return {
-        token: tokenDoc.data().token,
-        version: requiredVersion
-      };
-  
-    } catch (error) {
-      console.error("Error fetching config:", error);
-      return null;
-    }
-  }, []);
- 
-   const GenerateQRCode = useCallback(async (nameToUse = visitorName) => {
+  // getSharedToken removed as it's handled by apiClient internally
+
+
+  const GenerateQRCode = useCallback(async (nameToUse = visitorName) => {
     // Prevent further POST requests
     dispatch({ type: "START_LOADING" });
-    const result = await getSharedToken();
-    if (!result) {
+
+    // Check version if needed? For now skip version check or do it at login.
+
+    try {
+      // Use apiClient to generate QR
+      // currentUser.id should be the hostId (e.g. 1-100o)
+      const data = await apiClient.generateQRCode(state.currentUser.id, selectedGate, nameToUse);
+
+      const cardNo = data.cardNo; // Asp.Net Core default camelCase
+      console.log("QR Generated:", data);
+
+      // Check success (VisitorController returns success if at least one gate succeeded)
+      // data.gatesResult is list of { success: bool, message: ... }
+      const gateSuccess = data.gatesResult && data.gatesResult.length > 0 && data.gatesResult[0].success;
+
+      if (gateSuccess) {
+
+        // Removed Analytics logEvent
+
+        if (!qrCodeComponent) {
+          setQRCodeComponent(
+            <QRCode
+              size={getQRSize()}
+              fgColor={QR_CONFIG.appearance.fgColor}
+              bgColor={QR_CONFIG.appearance.bgColor}
+              level={QR_CONFIG.appearance.level}
+              value={cardNo.toString()}
+            />
+          );
+          const now = new Date();
+          const tomorrow = new Date(now);
+          tomorrow.setDate(now.getDate() + 1);
+
+          setEndDate(tomorrow);
+        }
+      } else {
+        dispatch({ type: "END_LOADING" });
+        setSelectedGate(0);
+        dispatch({
+          type: "UPDATE_ALERT",
+          payload: {
+            open: true,
+            severity: "error",
+            title: lang.error,
+            message: lang.failedGenerate,
+          },
+        });
+        return;
+      }
+
+      captureQRCodeImage();
+      // Set hidden data and visibility logic
+
+      setPassMessage(lang.passMessage);
+      setHiddenEndDate(
+        getValidityDisplay(lang, endDate, getGateName(selectedGate), isRtl)
+      );
+      // Note: setHiddenData is handled by useEffect when visitorName changes
+
+      document.getElementById("qrCode").style.visibility = "visible";
+      document.getElementById("qr-download").style.visibility = "visible";
+      document.getElementById("Message").style.visibility = "visible";
       dispatch({ type: "END_LOADING" });
       dispatch({
         type: "UPDATE_ALERT",
         payload: {
           open: true,
-          severity: "error",
-          title: lang.error,
-          message: lang.failed,
+          severity: "success",
+          title: lang.success,
+          message: lang.genrateCompleted,
         },
       });
-      return;
-    }
-    const { token, version } = result;
-    const json = JSON.stringify({
-      hostId: state.currentUser.firebaseDocumentId,
-      gateId: selectedGate,
-      name: nameToUse
-    });
 
-    try {
-      const response = await axios.post(
-        getAPIEndpoint(),
-        json,
-        {
-          headers: {
-            ...QR_CONFIG.api.headers,
-            "Accept-Language": isRtl ? "ar" : "en",
-            Authorization: "Bearer " + token,
-            "X-API-Version": version,
-          },
-          timeout: QR_CONFIG.api.timeout,
-        }
-      );
-
-      if (response.status === 200) {
-        const cardNo = response.data["cardNo"];
-        console.error("response:", response.data);
-
-        if (response.data["gatesResult"][0]["success"]) {
-
-          if (QR_CONFIG.analytics.trackGeneration) {
-            logEvent(analytics, QR_CONFIG.analytics.eventNames.generation, {
-              user_id: state.currentUser.id,
-              gate: selectedGate,
-              name: visitorName,
-            });
-          }
-          if (!qrCodeComponent) {
-            setQRCodeComponent(
-              <QRCode 
-                size={getQRSize()} 
-                fgColor={QR_CONFIG.appearance.fgColor} 
-                bgColor={QR_CONFIG.appearance.bgColor}
-                level={QR_CONFIG.appearance.level}
-                value={cardNo.toString()} 
-              />
-            );
-            const now = new Date();
-            const tomorrow = new Date(now);
-            tomorrow.setDate(now.getDate() + 1);
-
-            setEndDate(tomorrow);
-          }
-        } else {
-          dispatch({ type: "END_LOADING" });
-          setSelectedGate(0);
-          dispatch({
-            type: "UPDATE_ALERT",
-            payload: {
-              open: true,
-              severity: "error",
-              title: lang.error,
-              message: lang.failedGenerate,
-            },
-          });
-          return;
-        }
-
-        captureQRCodeImage();
-        // Set hidden data and visibility logic
-
-        setPassMessage(lang.passMessage);
-        setHiddenEndDate(
-          getValidityDisplay(lang, endDate, getGateName(selectedGate), isRtl)
-        );
-        // Note: setHiddenData is handled by useEffect when visitorName changes
-
-        document.getElementById("qrCode").style.visibility = "visible";
-        document.getElementById("qr-download").style.visibility = "visible";
-        document.getElementById("Message").style.visibility = "visible";
-        dispatch({ type: "END_LOADING" });
-        dispatch({
-          type: "UPDATE_ALERT",
-          payload: {
-            open: true,
-            severity: "success",
-            title: lang.success,
-            message: lang.genrateCompleted,
-          },
-        });
-      }
     } catch (error) {
       // Handle 400 status with specific message
       dispatch({ type: "END_LOADING" });
+      console.error("QR Gen Error:", error);
 
-      if (
-        error.response &&
-        error.response.status === 400 &&
-        error.response.data === "Visitor creation limit reached for today."
-      ) {
+      if (error.message && error.message.includes("limit reached")) {
         navigate("/home");
         dispatch({
           type: "UPDATE_ALERT",
@@ -272,7 +207,7 @@ function QRCodePanel() {
         });
       }
     }
-  }, [selectedGate, state.currentUser.firebaseDocumentId, state.currentUser.building, state.currentUser.flat, state.currentUser.name, isRtl, lang, dispatch, navigate, getGateName, endDate, captureQRCodeImage, formatDate, getSharedToken, qrCodeComponent]);
+  }, [selectedGate, state.currentUser.id, state.currentUser.building, state.currentUser.flat, state.currentUser.name, isRtl, lang, dispatch, navigate, getGateName, endDate, captureQRCodeImage, formatDate, qrCodeComponent]);
 
   useEffect(() => {
     if (selectedGate === 0) return;
@@ -289,12 +224,12 @@ function QRCodePanel() {
 
   const handleVisitorNameSubmit = useCallback(async (e) => {
     e.preventDefault();
-    
+
     // Prevent double submission
     if (isSubmitting) return;
-    
+
     setIsSubmitting(true);
-    
+
     const currentValue = visitorNameRef.current?.value || visitorName;
     if (!currentValue.trim()) {
       dispatch({
@@ -309,10 +244,10 @@ function QRCodePanel() {
       setIsSubmitting(false);
       return;
     }
-    
+
     setVisitorName(currentValue);
     setShowNameInput(false);
-    
+
     try {
       // Pass the current value directly to GenerateQRCode to avoid timing issues
       await GenerateQRCode(currentValue);
@@ -343,7 +278,7 @@ function QRCodePanel() {
 
     // Find the main container
     const container = element.querySelector('div > div[style*="display: flex"]') || element.querySelector('div[style*="display: flex"]') || element.firstElementChild;
-    
+
     if (!container) {
       console.error("Container not found for export");
       return;
@@ -358,31 +293,31 @@ function QRCodePanel() {
       originalColors[index] = el.style.color; // Save original color
       originalBackgrounds[index] = el.style.backgroundColor; // Save original background
       originalBorders[index] = el.style.border; // Save original border
-      
+
       el.style.color = "black"; // Set to black for download
-      
+
       // Apply light mode styling to rounded box elements
       if (el.id === 'hiddenData') {
         el.style.backgroundColor = "#f5f5f5";
         el.style.border = "1px solid #e0e0e0";
       }
     });
-    
+
     // Set export dimensions and styles
     element.style.backgroundColor = "white";
     element.style.fontFamily = "Tajawal, sans-serif";
     element.style.height = "100vh";
     element.style.minHeight = "100vh";
     element.style.alignItems = "center";
-    
+
     // Apply space-between layout to container
     container.style.height = "100%";
-    
+
     container.style.justifyContent = "space-between";
     container.style.flexDirection = "column";
-    
+
     try {
-      const canvas = await html2canvas(element, { 
+      const canvas = await html2canvas(element, {
         scale: 2,
         height: window.innerHeight * 0.85,
         windowHeight: window.innerHeight * 0.85
@@ -454,7 +389,7 @@ function QRCodePanel() {
 
     // Find the main container
     const container = element.querySelector('div > div[style*="display: flex"]') || element.querySelector('div[style*="display: flex"]') || element.firstElementChild;
-    
+
     if (!container) {
       console.error("Container not found for export");
       return;
@@ -470,22 +405,22 @@ function QRCodePanel() {
       originalColors[index] = el.style.color;
       originalBackgrounds[index] = el.style.backgroundColor;
       originalBorders[index] = el.style.border;
-      
+
       el.style.color = "black"; // Set to black for download
-      
+
       // Apply light mode styling to rounded box elements
       if (el.id === 'hiddenData') {
         el.style.backgroundColor = "#f5f5f5";
         el.style.border = "1px solid #e0e0e0";
       }
     });
-    
+
     // Set export dimensions and styles
     element.style.backgroundColor = "white";
     element.style.fontFamily = "Tajawal, sans-serif";
     element.style.height = "75vh";
     element.style.minHeight = "75vh";
-  
+
     element.style.alignItems = "center";
 
     // Apply space-between layout to container
@@ -502,7 +437,7 @@ function QRCodePanel() {
       });
     } catch (error) {
       console.error("Error generating the blob:", error);
-      
+
       // Restore original styles on error
       const restoredTextElements = element.querySelectorAll(
         "p, h4, span, #passMessage, #hiddenData, #hiddenEndDate"
@@ -579,10 +514,10 @@ function QRCodePanel() {
       container.style.justifyContent = originalJustifyContent;
       container.style.flexDirection = originalFlexDirection;
       container.style.height = originalContainerHeight;
-      
+
     }
   }, [qrImageUrl, lang, dispatch, getGateName, hiddenData, hiddenEndDate, selectedGate]);
-  
+
   const Panel = useMemo(() => styled(Paper)(({ theme }) => ({
     backgroundColor: theme.palette.mode === "dark" ? "#1A2027" : "#FCFCFC",
     alignItems: "center",
@@ -605,7 +540,7 @@ function QRCodePanel() {
       transition: { duration: 0.5, delay: 0.2 },
     },
   }), []);
-  
+
   const buttonVariants = useMemo(() => ({
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, delay: 0.6 } },
@@ -621,7 +556,7 @@ function QRCodePanel() {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                m:1.5
+                m: 1.5
               }}
               component={motion.div} // Animate the container
               variants={containerVariants}
@@ -697,15 +632,15 @@ function QRCodePanel() {
                   <br />
                   <form onSubmit={handleVisitorNameSubmit}>
                     <TextField
-                        fullWidth
-                        label={lang.visitorName}
-                        inputRef={visitorNameRef}
-                        defaultValue={visitorName}
-                        onBlur={handleVisitorNameBlur}
-                        variant="outlined"
-                        sx={{ mt: 2, mb: 2 }}
-                        required
-                      />
+                      fullWidth
+                      label={lang.visitorName}
+                      inputRef={visitorNameRef}
+                      defaultValue={visitorName}
+                      onBlur={handleVisitorNameBlur}
+                      variant="outlined"
+                      sx={{ mt: 2, mb: 2 }}
+                      required
+                    />
                     <Button
                       type="submit"
                       variant="contained"
@@ -749,8 +684,8 @@ function QRCodePanel() {
           <br />
           {qrCodeComponent}
           <br />
-          <Typography 
-            variant="body2" 
+          <Typography
+            variant="body2"
             id="hiddenData"
             sx={{
               whiteSpace: 'pre',
@@ -771,11 +706,11 @@ function QRCodePanel() {
           >
             {hiddenData}
           </Typography>
-          <Typography 
-            variant="body2" 
+          <Typography
+            variant="body2"
             id="hiddenEndDate"
-            sx={{ 
-              whiteSpace: 'pre-line', 
+            sx={{
+              whiteSpace: 'pre-line',
               lineHeight: 1.6,
               fontWeight: 400,
               color: 'text.secondary',

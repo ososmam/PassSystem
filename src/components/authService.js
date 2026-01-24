@@ -1,131 +1,68 @@
-import { 
-    firestore, 
-    firebaseAuth,
-    remoteConfig
-  } from "./firebaseApp";
-  import { 
-    collection, 
-    doc, 
-    query, 
-    where, 
-    getDocs, 
-    getDoc,
-    updateDoc,
-    arrayUnion
-  } from "firebase/firestore";
-  import {
-    signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged,
-    setPersistence,
-    browserLocalPersistence,
-    RecaptchaVerifier
-  } from "firebase/auth";
-  import {
-      fetchAndActivate,
-      getValue,
-    } from "firebase/remote-config";
-  
-  setPersistence(firebaseAuth, browserLocalPersistence);
-  
-  export const authService = {
-    recaptchaVerifier: null,
-    
-    initializeRecaptcha(containerId) {
-      // Clear any existing reCAPTCHA
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear();
-      }
-      
-      try {
-        this.recaptchaVerifier = new RecaptchaVerifier(
-          containerId, 
-          {
-            size: 'invisible',
-            callback: (response) => {
-              console.log("reCAPTCHA solved", response);
-            }
-          }, 
-          firebaseAuth
-        );
-        
-        window.recaptchaVerifier = this.recaptchaVerifier;
+import { apiClient } from "../apiClient";
+
+export const authService = {
+  // Login using API
+  async login(phone, password) {
+    try {
+      const response = await apiClient.login(phone, password);
+      if (response.success && response.token) {
+        localStorage.setItem("authToken", response.token);
         return true;
-      } catch (error) {
-        console.error("reCAPTCHA initialization error:", error);
-        throw error;
       }
-    },
-    async login(phone, password) {
-      try {
-        console.log(phone);
-        console.log(password);
-        await signInWithEmailAndPassword(firebaseAuth, `${phone}@dm2.test`, password);
-        return true;
-      } catch (error) {
-        throw error;
-      }
-    },
-  
-    async logout() {
-      await signOut(firebaseAuth);
-    },
-  
-    async checkDeviceLimit(userId, currentDeviceId) {
-      try {
-        await fetchAndActivate(remoteConfig);
-        const maxDevices = getValue (remoteConfig,('max_allowed_devices')).asNumber() || 1;
-  
-        const userRef = doc(firestore, "hosts", userId);
-        const userDoc = await getDoc(userRef);
-        const userData = userDoc.data();
-  
-        if (!userData.deviceIds) {
-          await updateDoc(userRef, {
-            deviceIds: [currentDeviceId]
-          });
-          return true;
-        }
-  
-        if (userData.deviceIds.includes(currentDeviceId)) {
-          return true;
-        }
-  
-        if (userData.deviceIds.length >= maxDevices) {
-          return false;
-        }
-  
-        await updateDoc(userRef, {
-          deviceIds: arrayUnion(currentDeviceId)
-        });
-        return true;
-      } catch (error) {
-        console.error("Device check error:", error);
-        throw error;
-      }
-    },
-  
-    async verifyUser(phone) {
-      const userDocRef = collection(firestore, "hosts");
-      const q = query(userDocRef, 
-        where("phone", "==", phone),
-        where("verifiedAccount", "==", true)
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.empty ? null : {
-        id: querySnapshot.docs[0].id,
-        ...querySnapshot.docs[0].data()
-      };
-    },
-  
-    onAuthStateChanged(callback) {
-      return onAuthStateChanged(firebaseAuth, callback);
-    },
-  
-    initializeRecaptcha(containerId) {
-      window.recaptchaVerifier = new RecaptchaVerifier(containerId, {
-        size: 'invisible',
-        callback: () => {}
-      }, firebaseAuth);
+      throw new Error(response.message || "Login failed");
+    } catch (error) {
+      console.error("Login error:", error);
+      throw error;
     }
-  };
+  },
+
+  async logout() {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("currentUser");
+  },
+
+  // Check device limit is now handled by registerDevice API
+  async checkDeviceLimit(userId, currentDeviceId) {
+    try {
+      // Platform defaults to "Web" or can be detected
+      const platform = /iPhone|iPad|iPod/.test(navigator.userAgent) ? "iOS" : /Android/.test(navigator.userAgent) ? "Android" : "Web";
+      await apiClient.registerDevice(userId, currentDeviceId, platform);
+      return true;
+    } catch (error) {
+      console.error("Device check error:", error);
+      return false;
+    }
+  },
+
+  async verifyUser(phone) {
+    try {
+      const property = await apiClient.getPropertyByPhone(phone);
+      if (property && property.verifiedAccount) {
+        return property;
+      }
+      return null;
+    } catch (error) {
+      console.error("Verify user error:", error);
+      return null;
+    }
+  },
+
+  // Mock deprecated methods to prevent crashes if called
+  initializeRecaptcha(containerId) {
+    console.warn("Recaptcha is deprecated in API mode");
+    return true;
+  },
+
+  onAuthStateChanged(callback) {
+    // Mock auth state change based on local storage
+    const token = localStorage.getItem("authToken");
+    if (token) {
+      // We don't have the full user object here immediately, but we can simulate a user presence
+      callback({ uid: "api-user" });
+    } else {
+      callback(null);
+    }
+    // Return unsubscribe function
+    return () => { };
+  }
+};
