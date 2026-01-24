@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Account Request - Dar Masr</title>
+    <link href="font.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #006D5B;
+            --text-color: #333;
+            --bg-color: #f9f9f9;
+            --error-color: #dc3545;
+            --success-color: #28a745;
+        }
+
+        body {
+            font-family: 'Tajawal', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            margin: 20px;
+            padding: 40px;
+            background: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin: 0 0 10px 0;
+            font-size: 1.8rem;
+        }
+
+        p {
+            margin: 0;
+            color: #666;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #444;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            font-family: inherit;
+            box-sizing: border-box;
+            /* Fix padding issue */
+        }
+
+        input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0, 109, 91, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-family: inherit;
+        }
+
+        button:hover {
+            background-color: #005546;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+            display: none;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .note {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Delete Account Request</h1>
+            <h1>طلب حذف الحساب</h1>
+        </header>
+
+        <form id="deleteForm">
+            <div class="form-group">
+                <label for="phone">Phone Number / رقم الهاتف</label>
+                <input type="tel" id="phone" name="phone" placeholder="e.g., 01xxxxxxxxx" required>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email Address / البريد الإلكتروني</label>
+                <input type="email" id="email" name="email" placeholder="name@example.com" required>
+            </div>
+
+            <button type="submit" id="submitBtn">Submit Request / إرسال الطلب</button>
+        </form>
+
+        <div id="messageBox" class="message"></div>
+
+        <p class="note">
+            Your data will be permanently removed within 30 days of verification.<br>
+            سيتم حذف بياناتك نهائياً خلال 30 يوماً من التحقق.
+        </p>
+
+        <footer style="text-align: center; margin-top: 30px; font-size: 0.8em; color: #999;">
+            <p>&copy; 2026 Dar Masr Community Management & Konekt Apps. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('deleteForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const btn = document.getElementById('submitBtn');
+            const msgBox = document.getElementById('messageBox');
+            const phone = document.getElementById('phone').value;
+            const email = document.getElementById('email').value;
+
+            // Reset UI
+            btn.disabled = true;
+            btn.classList.add('loading');
+            btn.textContent = 'Processing... / جاري المعالجة...';
+            msgBox.style.display = 'none';
+            msgBox.className = 'message';
+
+            try {
+                const response = await fetch('https://gh.darmasr2.com/api/Privacy/delete-account', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Internal': 'web_APP',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ phone, email })
+                });
+
+                if (response.ok) {
+                    msgBox.textContent = 'Your request has been submitted successfully.\nتم إرسال طلبك بنجاح.';
+                    msgBox.classList.add('success');
+                    msgBox.style.display = 'block';
+                    document.getElementById('deleteForm').reset();
+                } else {
+                    const data = await response.json();
+                    throw new Error(data.message || 'Submission failed');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                msgBox.textContent = 'Error: ' + (error.message || 'Something went wrong. Please try again.');
+                msgBox.classList.add('error');
+                msgBox.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+                btn.textContent = 'Submit Request / إرسال الطلب';
+            }
+        });
+    </script>
+
+</body>
+
+</html>
